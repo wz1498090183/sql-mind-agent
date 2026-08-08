@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# IDE
+.vscode/
+
+# Claude
+.claude/
+
+# Logs
+logs/
+
+# Environment (contains API keys)
+.env
+
+# Database files
+*.db
+*.sqlite
