@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Mind Agent — Text2SQL 可视化演示</title>
+<style>
+/* ============================================================
+   基础重置 & 全局变量
+   ============================================================ */
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #242736;
+  --border: #2e3148;
+  --text: #e1e4ed;
+  --text2: #9ca3af;
+  --text3: #6b7280;
+  --accent: #6366f1;
+  --accent-glow: rgba(99,102,241,.25);
+  --green: #22c55e;
+  --green-bg: rgba(34,197,94,.12);
+  --red: #ef4444;
+  --red-bg: rgba(239,68,68,.12);
+  --amber: #f59e0b;
+  --amber-bg: rgba(245,158,11,.12);
+  --blue: #3b82f6;
+  --blue-bg: rgba(59,130,246,.12);
+  --violet: #8b5cf6;
+  --violet-bg: rgba(139,92,246,.12);
+  --cyan: #06b6d4;
+  --cyan-bg: rgba(6,182,212,.12);
+  --pink: #ec4899;
+  --pink-bg: rgba(236,72,153,.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px 60px;
+}
+
+/* ============================================================
+   头部
+   ============================================================ */
+.header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+.header h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  background: linear-gradient(135deg, var(--accent), var(--violet));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.header p {
+  color: var(--text2);
+  font-size: .85rem;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   输入区
+   ============================================================ */
+.input-card {
+  width: 100%;
+  max-width: 720px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.input-row input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: .92rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color .2s;
+}
+.input-row input:focus { border-color: var(--accent); }
+.input-row input::placeholder { color: var(--text3); }
+.db-select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: .92rem;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  min-width: 160px;
+}
+.db-select:focus { border-color: var(--accent); }
+.btn-row { display: flex; gap: 8px; }
+.btn {
+  padding: 10px 24px;
+  border-radius: var(--radius-sm);
+  font-size: .9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  transition: all .2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 12px var(--accent-glow);
+}
+.btn-primary:hover { filter: brightness(1.15); }
+.btn-primary:disabled { opacity: .5; pointer-events: none; }
+.btn-ghost {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: var(--surface2); }
+
+/* ============================================================
+   状态栏
+   ============================================================ */
+.status-bar {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  font-size: .84rem;
+  color: var(--text2);
+  min-height: 24px;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot.idle { background: var(--text3); }
+.status-dot.running { background: var(--accent); animation: pulse 1s infinite; }
+.status-dot.done { background: var(--green); }
+.status-dot.degraded { background: var(--amber); }
+.status-dot.error { background: var(--red); }
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .4; transform: scale(1.6); }
+}
+
+/* ============================================================
+   时间线
+   ============================================================ */
+.timeline {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.timeline:empty::after {
+  content: "输入问题并点击「开始查询」，实时查看每一步执行过程";
+  color: var(--text3);
+  text-align: center;
+  padding: 40px 20px;
+  font-size: .88rem;
+}
+
+/* 单张步骤卡片 */
+.step {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  animation: slideIn .3s ease-out;
+  transition: background .3s, border-color .3s;
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 节点色标 */
+.step-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+.step-icon.plan    { background: var(--blue-bg);   color: var(--blue); }
+.step-icon.dispatch{ background: var(--cyan-bg);   color: var(--cyan); }
+.step-icon.aggregate{background: var(--violet-bg); color: var(--violet); }
+.step-icon.reflect { background: var(--amber-bg);  color: var(--amber); }
+.step-icon.finalize{ background: var(--green-bg);  color: var(--green); }
+.step-icon.degrade { background: var(--red-bg);    color: var(--red); }
+.step-icon.error   { background: var(--red-bg);    color: var(--red); }
+.step-icon.done    { background: var(--green-bg);  color: var(--green); }
+
+.step-body { flex: 1; min-width: 0; }
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.step-label {
+  font-weight: 600;
+  font-size: .88rem;
+}
+.step-badge {
+  font-size: .7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.badge-round { background: var(--accent-glow); color: var(--accent); }
+.step-detail {
+  font-size: .8rem;
+  color: var(--text2);
+  line-height: 1.5;
+  word-break: break-all;
+}
+.step-detail code {
+  font-family: var(--mono);
+  font-size: .78rem;
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--cyan);
+}
+.step-detail .sql-block {
+  display: block;
+  margin-top: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--cyan);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+
+/* 最终答案卡片 */
+.answer-card {
+  width: 100%;
+  max-width: 720px;
+  margin-top: 18px;
+  padding: 18px 22px;
+  border-radius: var(--radius);
+  border: 1px solid var(--green);
+  background: var(--green-bg);
+  animation: slideIn .4s ease-out;
+}
+.answer-card h3 {
+  font-size: .8rem;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-bottom: 6px;
+}
+.answer-card .answer-text {
+  font-size: .95rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+.answer-card.degraded {
+  border-color: var(--amber);
+  background: var(--amber-bg);
+}
+.answer-card.degraded h3 { color: var(--amber); }
+.answer-card.error {
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+.answer-card.error h3 { color: var(--red); }
+
+/* 元信息 */
+.meta-row {
+  width: 100%;
+  max-width: 720px;
+  font-size: .75rem;
+  color: var(--text3);
+  margin-top: 8px;
+}
+
+/* ============================================================
+   响应式
+   ============================================================ */
+@media (max-width: 520px) {
+  .input-row { flex-direction: column; }
+  .db-select { width: 100%; }
+  .btn-row { flex-direction: column; }
+  .btn { width: 100%; justify-content: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- 头部 -->
+<div class="header">
+  <h1>🧠 SQL Mind Agent</h1>
+  <p>Text2SQL 多步骤智能问答 — 实时执行可视化</p>
+</div>
+
+<!-- 输入区 -->
+<div class="input-card" id="inputCard">
+  <div class="input-row">
+    <input type="text" id="questionInput"
+           placeholder="输入你的问题，例如：Customers 表有多少条记录？"
+           autocomplete="off">
+    <select class="db-select" id="dbSelect">
+      <option value="concert_singer">concert_singer</option>
+      <option value="test">test</option>
+    </select>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-primary" id="submitBtn" onclick="startQuery()">
+      ⚡ 开始查询
+    </button>
+    <button class="btn btn-ghost" id="clearBtn" onclick="clearAll()">
+      🗑 清空
+    </button>
+  </div>
+</div>
+
+<!-- 状态栏 -->
+<div class="status-bar" id="statusBar">
+  <span class="status-dot idle" id="statusDot"></span>
+  <span id="statusText">就绪</span>
+</div>
+
+<!-- 时间线 -->
+<div class="timeline" id="timeline"></div>
+
+<!-- 最终答案 -->
+<div id="answerArea"></div>
+
+<!-- 元信息 -->
+<div class="meta-row" id="metaRow"></div>
+
+<script>
+/* ============================================================
+   常量 & 状态
+   ============================================================ */
+const API_BASE = window.location.origin;
+const NODE_ICONS = {
+  plan:      '📋',
+  dispatch:  '⚙️',
+  aggregate: '🧩',
+  reflect:   '🔍',
+  finalize:  '✅',
+  degrade:   '⚠️',
+  done:      '🎉',
+  error:     '❌',
+};
+
+const NODE_COLORS = {
+  plan:      'plan',
+  dispatch:  'dispatch',
+  aggregate: 'aggregate',
+  reflect:   'reflect',
+  finalize:  'finalize',
+  degrade:   'degrade',
+  error:     'error',
+  done:      'done',
+};
+
+let currentRound = 0;       // 当前轮次
+let nodeCountInRound = 0;   // 当前轮已出现的节点数
+let seenPlanInRound = false; // 本轮是否已见 plan 节点
+let eventSource = null;
+
+/* ---- DOM 引用 ---- */
+const $ = (id) => document.getElementById(id);
+const questionInput = $('questionInput');
+const dbSelect = $('dbSelect');
+const submitBtn = $('submitBtn');
+const clearBtn = $('clearBtn');
+const statusDot = $('statusDot');
+const statusText = $('statusText');
+const timeline = $('timeline');
+const answerArea = $('answerArea');
+const metaRow = $('metaRow');
+
+// Enter 提交
+questionInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') startQuery();
+});
+
+/* ============================================================
+   状态栏
+   ============================================================ */
+function setStatus(state) {
+  statusDot.className = 'status-dot ' + state;
+  const labels = {
+    idle: '就绪', running: '执行中…', done: '完成', degraded: '降级完成', error: '出错',
+  };
+  statusText.textContent = labels[state] || state;
+}
+
+/* ============================================================
+   开始查询
+   ============================================================ */
+function startQuery() {
+  const question = questionInput.value.trim();
+  if (!question) return;
+
+  // 终止上次连接
+  if (eventSource) { eventSource.close(); eventSource = null; }
+
+  // 重置 UI
+  timeline.innerHTML = '';
+  answerArea.innerHTML = '';
+  metaRow.innerHTML = '';
+  currentRound = 0;
+  nodeCountInRound = 0;
+  seenPlanInRound = false;
+
+  submitBtn.disabled = true;
+  setStatus('running');
+
+  const dbId = dbSelect.value;
+  const url = API_BASE + '/query/stream?question=' + encodeURIComponent(question)
+    + '&db_id=' + encodeURIComponent(dbId);
+
+  eventSource = new EventSource(url);
+
+  eventSource.addEventListener('start', (e) => {
+    const data = JSON.parse(e.data);
+    addStep('plan', '已连接', 'trace_id: ' + data.trace_id);
+  });
+
+  eventSource.addEventListener('node_done', (e) => {
+    const data = JSON.parse(e.data);
+    handleNodeDone(data);
+  });
+
+  eventSource.addEventListener('done', (e) => {
+    const data = JSON.parse(e.data);
+    handleDone(data);
+    closeEventSource();
+  });
+
+  eventSource.addEventListener('error', (e) => {
+    // SSE 连接错误或服务端推送的 error 事件
+    try {
+      const data = JSON.parse(e.data);
+      handleErrorEvent(data);
+    } catch (_) {
+      // 连接断开（非服务端 error 事件）
+      if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+        addStep('error', '连接断开', 'SSE 连接已关闭，可能是服务端或网络问题');
+        setStatus('error');
+        submitBtn.disabled = false;
+      }
+    }
+    closeEventSource();
+  });
+
+  // 兜底：EventSource 自身 onerror（连接层错误）
+  eventSource.onerror = () => {
+    if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+      // 仅在尚未展示 done/error 时追加提示
+      if (statusDot.classList.contains('running')) {
+        addStep('error', '连接中断', 'SSE 连接意外关闭');
+        setStatus('error');
+        submitBtn.disabled = false;
+      }
+    }
+    closeEventSource();
+  };
+}
+
+function closeEventSource() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  submitBtn.disabled = false;
+}
+
+/* ============================================================
+   处理节点事件
+   ============================================================ */
+function handleNodeDone(data) {
+  const node = data.node;
+  const label = data.label || node;
+  const payload = data.payload || {};
+
+  // 检测新一轮（plan 节点再次出现）
+  if (node === 'plan') {
+    if (seenPlanInRound) {
+      currentRound++;
+      nodeCountInRound = 0;
+      // 插入轮次分隔线
+      addRoundSeparator(currentRound + 1);
+    }
+    seenPlanInRound = true;
+  }
+  nodeCountInRound++;
+
+  // 构造详情文本
+  let detail = '';
+  let detailHtml = '';
+
+  if (node === 'plan' && payload.subtask_count !== undefined) {
+    detail = `拆解出 ${payload.subtask_count} 个子任务`;
+    if (payload.subtask_ids) {
+      detail += ` (${payload.subtask_ids.join(', ')})`;
+    }
+  } else if (node === 'dispatch') {
+    const total = payload.total || 0;
+    const ok = payload.success_count || 0;
+    const fail = payload.failed_count || 0;
+    detail = `子任务执行完成: 共 ${total} 个`;
+    if (ok > 0) detail += `, ✅ ${ok} 成功`;
+    if (fail > 0) detail += `, ❌ ${fail} 失败`;
+  } else if (node === 'reflect') {
+    if (payload.passed === true) {
+      detail = '审查通过 ✓';
+    } else if (payload.passed === false) {
+      detail = '审查不通过，将重规划…';
+    } else {
+      detail = '审查中…';
+    }
+  } else if (node === 'aggregate') {
+    detail = '正在汇总各子任务结果，生成自然语言答案';
+  } else if (node === 'finalize') {
+    detail = '反思通过，答案已确认为最终结果';
+  } else if (node === 'degrade') {
+    detail = '已达最大重试次数，生成降级回答';
+  }
+
+  addStep(node, label, detail, detailHtml);
+
+  // 如果 payload 中有 subtask 级别的 SQL，追加展示
+  if (payload.subtask_sqls && Array.isArray(payload.subtask_sqls)) {
+    payload.subtask_sqls.forEach(s => {
+      addStep('dispatch', `SQL [${s.id}]`, '', '<span class="sql-block">' + escapeHtml(s.sql || '') + '</span>');
+    });
+  }
+}
+
+/* ============================================================
+   处理最终结果
+   ============================================================ */
+function handleDone(data) {
+  const status = data.status || 'done';
+  const answer = data.final_answer || '(无答案)';
+  const plan = data.plan || [];
+  const iterations = data.iterations || 0;
+
+  let cardClass = '';
+  let title = '';
+  if (status === 'done') {
+    cardClass = '';
+    title = '📝 最终答案';
+    setStatus('done');
+  } else if (status === 'degraded') {
+    cardClass = 'degraded';
+    title = '⚠️ 降级回答（部分结果仅供参考）';
+    setStatus('degraded');
+  } else {
+    cardClass = 'error';
+    title = '❌ 执行异常';
+    setStatus('error');
+  }
+
+  answerArea.innerHTML = `
+    <div class="answer-card ${cardClass}">
+      <h3>${title}</h3>
+      <div class="answer-text">${escapeHtml(answer)}</div>
+    </div>
+  `;
+
+  metaRow.innerHTML = `trace_id: ${escapeHtml(data.trace_id)} &nbsp;|&nbsp; 状态: ${status} &nbsp;|&nbsp; 迭代轮次: ${iterations} &nbsp;|&nbsp; 子任务数: ${plan.length}`;
+}
+
+function handleErrorEvent(data) {
+  const errMsg = data.error || data.detail || '未知错误';
+  addStep('error', '请求出错', errMsg);
+  setStatus('error');
+
+  answerArea.innerHTML = `
+    <div class="answer-card error">
+      <h3>❌ 错误</h3>
+      <div class="answer-text">${escapeHtml(errMsg)}</div>
+    </div>
+  `;
+
+  if (data.trace_id) {
+    metaRow.innerHTML = `trace_id: ${escapeHtml(data.trace_id)}`;
+  }
+}
+
+/* ============================================================
+   UI 工具
+   ============================================================ */
+function addStep(node, label, detail, detailHtml) {
+  const icon = NODE_ICONS[node] || '●';
+  const colorClass = NODE_COLORS[node] || 'plan';
+
+  let detailContent = '';
+  if (detailHtml) {
+    detailContent = detailHtml;
+  } else if (detail) {
+    detailContent = escapeHtml(detail);
+  }
+
+  const div = document.createElement('div');
+  div.className = 'step';
+  div.innerHTML = `
+    <div class="step-icon ${colorClass}">${icon}</div>
+    <div class="step-body">
+      <div class="step-header">
+        <span class="step-label">${escapeHtml(label)}</span>
+        ${currentRound > 0 ? '<span class="step-badge badge-round">第' + (currentRound + 1) + '轮</span>' : ''}
+      </div>
+      ${detailContent ? '<div class="step-detail">' + detailContent + '</div>' : ''}
+    </div>
+  `;
+  timeline.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function addRoundSeparator(roundNum) {
+  const sep = document.createElement('div');
+  sep.style.cssText = `
+    display: flex; align-items: center; gap: 12px;
+    padding: 4px 0; margin: 4px 0;
+    font-size: .75rem; color: var(--accent); font-weight: 600;
+  `;
+  sep.innerHTML = `
+    <span style="flex:1;height:1px;background:var(--border)"></span>
+    🔄 第 ${roundNum} 轮重规划
+    <span style="flex:1;height:1px;background:var(--border)"></span>
+  `;
+  timeline.appendChild(sep);
+}
+
+function clearAll() {
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  timeline.innerHTML = '';
+  answerArea.innerHTML = '';
+  metaRow.innerHTML = '';
+  currentRound = 0;
+  nodeCountInRound = 0;
+  seenPlanInRound = false;
+  submitBtn.disabled = false;
+  setStatus('idle');
+  questionInput.focus();
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+</script>
+</body>
+</html>

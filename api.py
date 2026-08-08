@@ -14,10 +14,11 @@ FastAPI 接口模块 — Text2SQL 多步骤智能问答 API。
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -485,6 +486,25 @@ async def health() -> dict[str, str]:
         dict: {"status": "ok"}。
     """
     return {"status": "ok"}
+
+
+# ============================================================
+# 接口 4: GET / — 首页（单页可视化）
+# ============================================================
+@app.get("/", summary="可视化首页")
+async def index() -> FileResponse:
+    """返回 index.html 单页，提供 SSE 流式查询的可视化界面。
+
+    Returns:
+        FileResponse: index.html 文件。
+    """
+    html_path = Path(__file__).resolve().parent / "index.html"
+    if not html_path.is_file():
+        return JSONResponse(
+            status_code=404,
+            content={"error": "index.html 不存在，请将前端页面放在项目根目录"},
+        )
+    return FileResponse(str(html_path), media_type="text/html; charset=utf-8")
 
 
 # ============================================================
