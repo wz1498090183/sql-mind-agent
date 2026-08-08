@@ -12,6 +12,7 @@ FastAPI 接口模块 — Text2SQL 多步骤智能问答 API。
 ⚠ 安全提示: 当前未开启鉴权，仅限本地演示，切勿暴露到公网。
 """
 
+import asyncio
 import json
 from typing import Any, AsyncGenerator
 
@@ -23,11 +24,18 @@ from sse_starlette.sse import EventSourceResponse
 from app.graph import build_main_graph
 from app.log_utils import get_logger, new_trace_id
 from app.state import SubTask, init_main_state
+from trace_store import init_trace_db, save_trace
 
 # ============================================================
 # 常量
 # ============================================================
 _WARNING: str = "⚠ 未开启鉴权，仅限本地演示，勿暴露公网"
+_REQUEST_TIMEOUT: float = float(
+    __import__("os").environ.get("REQUEST_TIMEOUT_SEC", "120")
+)
+_SUBTASK_TIMEOUT: float = float(
+    __import__("os").environ.get("SUBTASK_TIMEOUT_SEC", "30")
+)
 
 # 节点名称 → 中文描述映射（用于 SSE 事件 label 字段）
 _NODE_LABELS: dict[str, str] = {
@@ -52,11 +60,15 @@ app = FastAPI(
 
 @app.on_event("startup")
 async def _startup_warning() -> None:
-    """启动时打印安全警告。"""
+    """启动时打印安全警告并初始化 traces 表。"""
     print()
     print("=" * 60)
     print(f"  {_WARNING}")
     print("=" * 60)
+    print()
+    # 初始化 trace 落库表
+    db_path = init_trace_db()
+    print(f"  trace_store 初始化完成: {db_path}")
     print()
 
 
@@ -183,20 +195,69 @@ async def query(req: QueryRequest) -> QueryResponse | JSONResponse:
     """
     trace_id: str = new_trace_id()
     log = get_logger(trace_id)
-    log.info(f"POST /query  问题长度={len(req.question)}  db_id={req.db_id}")
+    log.info(
+        f"POST /query  问题长度={len(req.question)}  db_id={req.db_id}  "
+        f"request_timeout={_REQUEST_TIMEOUT}s  subtask_timeout={_SUBTASK_TIMEOUT}s"
+    )
 
+    final_state: dict[str, Any] = {}
     try:
-        # 构建图并执行同步 invoke
+        # 构建图并执行同步 invoke（整体请求级超时用 asyncio.wait_for 包裹）
         graph = build_main_graph()
         state = init_main_state(
             question=req.question,
             db_id=req.db_id,
             trace_id=trace_id,
         )
-        final_state = graph.invoke(state)
+
+        async def _run_graph() -> dict[str, Any]:
+            """在线程池外执行同步 graph.invoke，避免阻塞事件循环。"""
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, graph.invoke, state)
+
+        final_state = await asyncio.wait_for(
+            _run_graph(),
+            timeout=_REQUEST_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        log.error(
+            f"POST /query 请求超时  timeout={_REQUEST_TIMEOUT}s  "
+            f"已等待 {_REQUEST_TIMEOUT}s 仍未完成，返回降级响应"
+        )
+        # 超时降级：尝试从已有状态构造部分响应
+        error_response = JSONResponse(
+            status_code=504,
+            content={
+                "trace_id": trace_id,
+                "error": "RequestTimeout",
+                "detail": (
+                    f"请求超时（>{_REQUEST_TIMEOUT}s），"
+                    f"已等待 {_REQUEST_TIMEOUT}s 仍未完成。"
+                    f"建议简化问题或检查数据库/LLM 服务状态。"
+                ),
+            },
+        )
+        # 超时降级也写入 trace 记录（状态标记为 timeout）
+        try:
+            save_trace({
+                "trace_id": trace_id,
+                "question": req.question,
+                "db_id": req.db_id,
+                "final_answer": None,
+                "status": "timeout",
+                "iteration": 0,
+                "plan": [],
+                "reflection": {
+                    "passed": False,
+                    "reason": f"请求超时（>{_REQUEST_TIMEOUT}s）",
+                },
+            })
+        except Exception as save_exc:
+            log.error(f"save_trace 超时落库异常: {save_exc}")
+        return error_response
     except Exception as exc:
         log.error(f"POST /query 异常: {type(exc).__name__}: {exc}")
-        return JSONResponse(
+        error_response = JSONResponse(
             status_code=500,
             content={
                 "trace_id": trace_id,
@@ -204,6 +265,24 @@ async def query(req: QueryRequest) -> QueryResponse | JSONResponse:
                 "detail": str(exc),
             },
         )
+        # 异常也落库
+        try:
+            save_trace({
+                "trace_id": trace_id,
+                "question": req.question,
+                "db_id": req.db_id,
+                "final_answer": None,
+                "status": "error",
+                "iteration": 0,
+                "plan": [],
+                "reflection": {
+                    "passed": False,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                },
+            })
+        except Exception as save_exc:
+            log.error(f"save_trace 异常落库异常: {save_exc}")
+        return error_response
 
     final_answer: str | None = final_state.get("final_answer")
     status: str = final_state.get("status", "error")
@@ -214,6 +293,12 @@ async def query(req: QueryRequest) -> QueryResponse | JSONResponse:
         f"POST /query 完成  status={status}  "
         f"plan子任务数={len(plan)}  iterations={iteration + 1}"
     )
+
+    # 请求结束落库 trace 记录，便于事后 badcase 排查
+    try:
+        save_trace(final_state)
+    except Exception as save_exc:
+        log.error(f"save_trace 落库异常: {save_exc}")
 
     return QueryResponse(
         trace_id=trace_id,
@@ -262,6 +347,8 @@ async def query_stream(
 
     async def event_generator() -> AsyncGenerator[dict[str, str], None]:
         """SSE 事件生成器，逐节点推送进度。"""
+        # 用于 finally 块中落库的 accumulated_state 引用
+        accumulated_state: dict[str, Any] = {}
         try:
             log.info(
                 f"GET /query/stream 开始  问题长度={len(question)}  db_id={db_id}"
@@ -283,18 +370,45 @@ async def query_stream(
 
             # 用 astream 流式执行，每个节点完成后 yield 一次
             # accumulated_state 合并所有 update，循环结束后即为最终状态
-            accumulated_state: dict[str, Any] = dict(state)
+            accumulated_state = dict(state)
             last_node: str | None = None
 
-            async for chunk in graph.astream(state, stream_mode="updates"):
+            # 对每个 astream chunk 加超时检测，整体超时后走降级而非崩溃
+            astream_iter = graph.astream(state, stream_mode="updates")
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(
+                        astream_iter.__anext__(),
+                        timeout=_REQUEST_TIMEOUT,
+                    )
+                except asyncio.TimeoutError:
+                    log.error(
+                        f"GET /query/stream 请求超时  "
+                        f"timeout={_REQUEST_TIMEOUT}s，返回降级响应"
+                    )
+                    yield {
+                        "event": "error",
+                        "data": json.dumps(
+                            {
+                                "trace_id": trace_id,
+                                "error": "RequestTimeout",
+                                "detail": (
+                                    f"请求超时（>{_REQUEST_TIMEOUT}s），"
+                                    f"建议简化问题或检查数据库/LLM 服务状态。"
+                                ),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                    # 超时落库
+                    accumulated_state["status"] = "timeout"
+                    return
+                except StopAsyncIteration:
+                    break  # 正常结束
+
                 for node_name, node_output in chunk.items():
                     # 合并状态更新
                     accumulated_state.update(node_output)
-
-                    # 检测重试循环：plan 节点出现了第二次
-                    if node_name == "plan":
-                        if last_node is not None and last_node != "plan":
-                            pass  # plan 可能被正常首次调用
 
                     label = _NODE_LABELS.get(node_name, node_name)
                     payload = _extract_payload(node_name, node_output)
@@ -335,6 +449,12 @@ async def query_stream(
             }
             log.info(f"GET /query/stream 完成  status={final_status}")
 
+            # 正常结束落库
+            try:
+                save_trace(accumulated_state)
+            except Exception as save_exc:
+                log.error(f"save_trace 落库异常: {save_exc}")
+
         except Exception as exc:
             log.error(f"GET /query/stream 异常: {type(exc).__name__}: {exc}")
             yield {
@@ -344,6 +464,12 @@ async def query_stream(
                     ensure_ascii=False,
                 ),
             }
+            # 异常落库
+            accumulated_state["status"] = "error"
+            try:
+                save_trace(accumulated_state)
+            except Exception as save_exc:
+                log.error(f"save_trace 异常落库异常: {save_exc}")
 
     return EventSourceResponse(event_generator())
 

@@ -48,6 +48,7 @@ def get_llm(temperature: float = 0.0) -> ChatOpenAI:
         - LLM_API_KEY: API 密钥
         - LLM_BASE_URL: API 基础 URL（兼容 OpenAI / DeepSeek / 本地服务）
         - LLM_MODEL: 模型名称
+        - LLM_REQUEST_TIMEOUT: LLM 单次调用超时秒数，默认 60s
 
     当 USE_LOCAL_MODEL=True 时打印 TODO 提示，但仍使用相同接口，
     便于后续 GRPO 微调模型无缝替换。
@@ -62,11 +63,15 @@ def get_llm(temperature: float = 0.0) -> ChatOpenAI:
         # TODO: 本地模型切换 — 后续替换为本地 vLLM/Ollama 部署的 GRPO 微调模型
         print("TODO本地模型: 当前仍使用 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL 配置的远端接口")
 
+    # LLM 单次调用超时（可通过环境变量 LLM_REQUEST_TIMEOUT 覆盖，默认 60s）
+    llm_timeout = float(os.environ.get("LLM_REQUEST_TIMEOUT", "60"))
+
     return ChatOpenAI(
         api_key=os.environ.get("LLM_API_KEY", "sk-placeholder"),
         base_url=os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1"),
         model=os.environ.get("LLM_MODEL", "gpt-4o"),
         temperature=temperature,
+        request_timeout=llm_timeout,
     )
 
 
@@ -171,8 +176,25 @@ def call_json(
                 + f"不要包含任何额外文字。（重试 {attempt - 1}/{max_retry}）"
             )
 
-        # 调用 LLM
-        response = llm.invoke(current_prompt)
+        # 调用 LLM（带 request_timeout，超时时捕获并记录日志后重试）
+        try:
+            response = llm.invoke(current_prompt)
+        except Exception as llm_exc:
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+            log.warning(
+                f"call_json LLM 调用异常  耗时 {elapsed_ms:.0f}ms  "
+                f"尝试={attempt}/{max_retry + 1}  "
+                f"异常={type(llm_exc).__name__}: {llm_exc}"
+            )
+            if attempt <= max_retry + 1:
+                continue  # 重试下一轮
+            # 全部重试失败
+            log.error(f"call_json 全部 {max_retry + 1} 次尝试均失败")
+            raise ValueError(
+                f"LLM 在 {max_retry + 1} 次尝试后仍无法返回有效 JSON。"
+                f"最后一次异常: {type(llm_exc).__name__}: {llm_exc}"
+            ) from llm_exc
+
         last_output = response.content if hasattr(response, "content") else str(response)
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
@@ -215,7 +237,16 @@ def call_text(prompt: str, trace_id: str) -> str:
     llm = get_llm(temperature=0.0)
 
     t0 = time.perf_counter()
-    response = llm.invoke(prompt)
+    try:
+        response = llm.invoke(prompt)
+    except Exception as llm_exc:
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        log.error(
+            f"call_text LLM 调用异常  耗时 {elapsed_ms:.0f}ms  "
+            f"异常={type(llm_exc).__name__}: {llm_exc}"
+        )
+        raise
+
     text = response.content if hasattr(response, "content") else str(response)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 

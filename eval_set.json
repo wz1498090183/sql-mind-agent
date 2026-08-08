@@ -1,0 +1,22 @@
+[
+    {
+        "question": "concert_singer 数据库的 Customers 表有多少条记录？",
+        "db_id": "concert_singer",
+        "gold_sql": "SELECT COUNT(*) FROM Customers"
+    },
+    {
+        "question": "Stadiums 表有多少条记录？",
+        "db_id": "concert_singer",
+        "gold_sql": "SELECT COUNT(*) FROM Stadiums"
+    },
+    {
+        "question": "列出所有歌手的姓名。",
+        "db_id": "concert_singer",
+        "gold_sql": "SELECT Name FROM Singers"
+    },
+    {
+        "question": "查询 Customers 表中所有的客户姓名。",
+        "db_id": "concert_singer",
+        "gold_sql": "SELECT Name FROM Customers"
+    }
+]

@@ -7,6 +7,7 @@ SQLite 数据库操作工具模块。
 import os
 import sqlite3
 import sys
+import threading
 from pathlib import Path
 
 # 确保项目根目录在 sys.path 中，支持任意目录运行本文件
@@ -65,6 +66,11 @@ def execute_sql(db_id: str, sql: str, timeout: float = 5.0) -> dict:
     其他 SQL 类型（INSERT/UPDATE/DELETE/DROP 等）直接拒绝。
     所有 sqlite3.Error 被捕获并转换为结构化 error 字段，不向上抛出异常。
 
+    超时保护（双层）：
+        1. PRAGMA busy_timeout — SQLite 内置的忙等待超时。
+        2. conn.interrupt() 看门狗线程 — 硬超时兜底，
+           确保长时间运行的查询也能被中断。
+
     Args:
         db_id: 数据库标识符。
         sql: 待执行的 SQL 语句（仅允许 SELECT / WITH）。
@@ -98,6 +104,21 @@ def execute_sql(db_id: str, sql: str, timeout: float = 5.0) -> dict:
             "error": str(e),
         }
 
+    # 硬超时看门狗：用一个后台线程在 timeout 秒后调用 conn.interrupt()
+    # 这种方式是线程安全的，会触发正在执行的查询抛出 sqlite3.OperationalError
+    interrupted = threading.Event()
+
+    def _watchdog() -> None:
+        """看门狗线程：超时后中断当前连接上的查询。"""
+        if not interrupted.wait(timeout):
+            try:
+                conn.interrupt()
+            except Exception:
+                pass  # interrupt 通常是安全的，忽略异常
+
+    watchdog = threading.Thread(target=_watchdog, daemon=True)
+    watchdog.start()
+
     try:
         with conn:
             conn.execute(f"PRAGMA busy_timeout = {int(timeout * 1000)}")
@@ -107,6 +128,7 @@ def execute_sql(db_id: str, sql: str, timeout: float = 5.0) -> dict:
             # sqlite3.Row 转 tuple 确保结果可序列化
             if rows and isinstance(rows[0], sqlite3.Row):
                 rows = [tuple(row) for row in rows]
+            interrupted.set()  # 正常完成，取消看门狗
             return {
                 "success": True,
                 "columns": columns,
@@ -114,13 +136,19 @@ def execute_sql(db_id: str, sql: str, timeout: float = 5.0) -> dict:
                 "error": None,
             }
     except sqlite3.Error as e:
+        interrupted.set()
+        err_msg = str(e)
+        # 区分是否由 interrupt() 触发
+        if "interrupted" in err_msg.lower():
+            err_msg = f"SQL 执行超时（>{timeout}s），查询已被中断: {err_msg}"
         return {
             "success": False,
             "columns": [],
             "rows": [],
-            "error": f"SQL 执行错误: {e}",
+            "error": f"SQL 执行错误: {err_msg}",
         }
     finally:
+        interrupted.set()
         conn.close()
 
 

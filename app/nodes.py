@@ -6,9 +6,10 @@
 """
 
 import json
+import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
@@ -301,7 +302,7 @@ def dispatch_node(state: MainState) -> dict[str, Any]:
             f"子任务={level_ids}  并行数={len(level)}"
         )
 
-        # 同一层内并行执行
+        # 同一层内并行执行（带超时兜底）
         def run_subtask(task: SubTask) -> SubTask:
             """在线程池中执行单个子任务，传入上游依赖结果。"""
             tid = task["id"]
@@ -325,8 +326,12 @@ def dispatch_node(state: MainState) -> dict[str, Any]:
             )
             return result_task
 
+        # 子任务超时秒数（可通过环境变量 SUBTASK_TIMEOUT_SEC 覆盖，默认 30s）
+        _subt_timeout = float(
+            os.environ.get("SUBTASK_TIMEOUT_SEC", "30")
+        )
+
         level_start = time.perf_counter()
-        # 注意：每条线程会独立打开 sqlite 连接（solve_subtask → get_schema），线程安全
         with ThreadPoolExecutor(max_workers=max(1, len(level))) as executor:
             futures = {
                 executor.submit(run_subtask, task): task["id"]
@@ -335,8 +340,21 @@ def dispatch_node(state: MainState) -> dict[str, Any]:
             for future in as_completed(futures):
                 tid = futures[future]
                 try:
-                    result_task = future.result()
+                    result_task = future.result(timeout=_subt_timeout)
                     completed_map[tid] = result_task
+                except FutureTimeoutError:
+                    log.error(
+                        f"dispatch_node: 子任务 {tid} 超时  "
+                        f"timeout={_subt_timeout}s，标记为 failed"
+                    )
+                    # 超时兜底：标记子任务为 failed，不阻塞整体
+                    task = next(s for s in level if s["id"] == tid)
+                    task["status"] = "failed"
+                    task["error"] = (
+                        f"子任务执行超时（>{_subt_timeout}s），"
+                        f"可能原因：LLM 响应慢、SQL 执行慢、数据库锁竞争"
+                    )
+                    completed_map[tid] = task
                 except Exception as e:
                     log.error(f"dispatch_node: 子任务 {tid} 执行异常: {e}")
                     # 构造失败的 SubTask
