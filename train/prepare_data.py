@@ -303,6 +303,7 @@ def prepare_data(
             "instruction": instruction,
             "input": "",
             "output": gold_sql,
+            "db_id": db_id,
         })
 
     if skipped_no_schema:
