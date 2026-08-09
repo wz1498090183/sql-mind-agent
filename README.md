@@ -142,18 +142,27 @@ python main.py --demo
 
 ```
 sql-mind-agent/
-├── api.py                  # FastAPI Web 服务（同步 + SSE 流式）
-├── main.py                 # CLI 命令行入口
-├── run_soul_case.py        # Demo 演示脚本（3 个 Soul Case）
-├── app/
-│   ├── graph.py            # 主图编排（LangGraph StateGraph）
-│   ├── nodes.py            # 6 个主图节点实现
-│   ├── sql_subgraph.py     # SQL 求解子图（生成→校验→执行→重试）
-│   ├── state.py            # TypedDict 状态定义
-│   ├── llm_client.py       # LLM 客户端封装
-│   ├── db_utils.py         # SQLite 数据库操作工具
-│   ├── log_utils.py        # 日志模块（loguru）
-│   └── test/               # 测试目录
-├── spider/database/        # SQLite 数据库文件（Spider 格式）
-└── .env                    # 环境配置
+├── main.py              # 命令行入口
+├── api.py               # FastAPI 服务入口
+├── evaluate.py          # 批量评估脚本
+├── run_soul_case.py     # 灵魂 Case 演示脚本
+├── .env / .gitignore / CLAUDE.md / README.md
+├── app/                 # ← 核心代码
+│   ├── state.py         #   状态定义
+│   ├── graph.py         #   主图编排
+│   ├── nodes.py         #   6 个节点实现
+│   ├── sql_subgraph.py  #   SQL 求解子图
+│   ├── llm_client.py    #   LLM 客户端
+│   ├── db_utils.py      #   数据库工具
+│   ├── log_utils.py     #   日志工具
+│   ├── trace_store.py   #   链路追踪落库
+│   └── static/
+│       └── index.html   #   前端页面
+├── data/
+│   └── eval_set.json    #   评估用例
+├── train/               # GRPO 训练（独立模块）
+├── tools/               # 辅助工具
+├── spider/              # Spider 数据库
+└── spider_data/         # Spider 原始数据
+
 ```
