@@ -21,7 +21,7 @@ from app.state import init_main_state
 # ============================================================
 # 内置演示问题
 # ============================================================
-_DEMO_QUESTION = "concert_singer 数据库的 Customers 表有多少条记录？Products 表有哪些产品名称？"
+_DEMO_QUESTION = "department_store 数据库的 Customers 表有多少条记录？Products 表有哪些产品名称？"
 
 
 def _print_section(title: str) -> None:
@@ -129,8 +129,8 @@ def main() -> None:
     parser.add_argument(
         "--db_id", "-d",
         type=str,
-        default="concert_singer",
-        help='目标数据库标识符（默认: concert_singer）',
+        default="department_store",
+        help='目标数据库标识符（默认: department_store）',
     )
     parser.add_argument(
         "--demo",

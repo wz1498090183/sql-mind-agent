@@ -1,22 +1,32 @@
 [
     {
-        "question": "concert_singer 数据库的 Customers 表有多少条记录？",
-        "db_id": "concert_singer",
+        "question": "department_store 数据库的 Customers 表有多少条记录？",
+        "db_id": "department_store",
         "gold_sql": "SELECT COUNT(*) FROM Customers"
     },
     {
-        "question": "Stadiums 表有多少条记录？",
-        "db_id": "concert_singer",
-        "gold_sql": "SELECT COUNT(*) FROM Stadiums"
+        "question": "Products 表中有多少种不同的产品类型(product_type_code)？列出每种类型的产品数量。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_type_code, COUNT(*) FROM Products GROUP BY product_type_code"
     },
     {
-        "question": "列出所有歌手的姓名。",
-        "db_id": "concert_singer",
-        "gold_sql": "SELECT Name FROM Singers"
+        "question": "查询在 Customer_Orders 表中下过订单的客户姓名（去重），以及每个客户的订单数量，按订单数量降序排列。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT T1.customer_name, COUNT(*) FROM Customers AS T1 JOIN Customer_Orders AS T2 ON T1.customer_id = T2.customer_id GROUP BY T1.customer_id ORDER BY COUNT(*) DESC"
     },
     {
-        "question": "查询 Customers 表中所有的客户姓名。",
-        "db_id": "concert_singer",
-        "gold_sql": "SELECT Name FROM Customers"
+        "question": "哪些产品类型(product_type_code)的平均价格超过 700？列出类型和平均价格。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_type_code, AVG(product_price) FROM Products GROUP BY product_type_code HAVING AVG(product_price) > 700"
+    },
+    {
+        "question": "查询所有供应商(supplier_name)及其供应的产品总价值(total_value_purchased)之和，按总价值降序排列。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT T1.supplier_name, SUM(T2.total_value_purchased) FROM Suppliers AS T1 JOIN Product_Suppliers AS T2 ON T1.supplier_id = T2.supplier_id GROUP BY T1.supplier_id ORDER BY SUM(T2.total_value_purchased) DESC"
+    },
+    {
+        "question": "Hardware 类型和 Clothes 类型的产品各有多少？哪种类型产品数量更多？两种类型的平均价格相差多少？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_type_code, COUNT(*), AVG(product_price) FROM Products WHERE product_type_code IN ('Hardware', 'Clothes') GROUP BY product_type_code"
     }
 ]

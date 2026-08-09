@@ -87,7 +87,7 @@ class QueryRequest(BaseModel):
     db_id: str = Field(
         ...,
         description="目标数据库标识符",
-        examples=["concert_singer"],
+        examples=["department_store"],
     )
 
 

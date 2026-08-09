@@ -35,7 +35,7 @@ def get_connection(db_id: str) -> sqlite3.Connection:
     连接失败时抛出 FileNotFoundError 并附带完整缺失路径。
 
     Args:
-        db_id: 数据库标识符，对应 Spider 数据集中的数据库名（如 "concert_singer"）。
+        db_id: 数据库标识符，对应 Spider 数据集中的数据库名（如 "department_store"）。
 
     Returns:
         sqlite3.Connection: 已建立的数据库连接对象，使用 Row 工厂以便按列名访问。
@@ -276,8 +276,8 @@ if __name__ == "__main__":
 
         print(f"\n=== 自测完成 ===")
 
-    # 尝试 concert_singer，若不存在则回退到已有的 test 库
-    test_db_ids = ["concert_singer", "test"]
+    # 尝试 department_store，若不存在则回退到已有的 test 库
+    test_db_ids = ["department_store", "test"]
     tested = False
     for db_id in test_db_ids:
         root = os.environ.get("SPIDER_DB_ROOT", "./spider/database")
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     if not tested:
         print(
             "所有候选数据库均未找到。请确认 SPIDER_DB_ROOT 下存在 "
-            f"concert_singer/concert_singer.sqlite 或 test/test.sqlite",
+            f"department_store/department_store.sqlite 或 test/test.sqlite",
             file=sys.stderr,
         )
         sys.exit(1)

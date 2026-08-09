@@ -6,7 +6,7 @@ Text2SQL 批量评估模块。
     python evaluate.py                           # 默认用 eval_set.json，tag="default"
     python evaluate.py --tag grpo-v1             # 标注为 GRPO 微调模型
     python evaluate.py --set my_cases.json       # 自定义评估集
-    python evaluate.py --db concert_singer       # 只看某个数据库
+    python evaluate.py --db department_store       # 只看某个数据库
     python evaluate.py --timeout 180             # 单条超时（默认 120s）
 """
 
@@ -507,7 +507,7 @@ def main() -> None:
             "  python evaluate.py                              # 默认评估\n"
             '  python evaluate.py --tag grpo-v1               # 标注 GRPO 模型\n'
             '  python evaluate.py --set my_cases.json          # 自定义评估集\n'
-            '  python evaluate.py --db concert_singer          # 按数据库过滤\n'
+            '  python evaluate.py --db department_store          # 按数据库过滤\n'
             "  python evaluate.py --timeout 180 --max-iter 2   # 自定义参数"
         ),
     )

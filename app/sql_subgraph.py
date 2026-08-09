@@ -503,12 +503,12 @@ if __name__ == "__main__":
     log = get_logger(tid)
     log.info("=== sql_subgraph 自测开始 ===")
 
-    # 手造 SubTask: 查询 concert_singer 库中 Customers 表的总数
+    # 手造 SubTask: 查询 department_store 库中 Customers 表的总数
     subtask: SubTask = {
         "id": f"subtask_{tid}",
         "description": "查询 Customers 表中客户的总数",
         "depends_on": [],
-        "db_id": "concert_singer",
+        "db_id": "department_store",
         "sql": None,
         "result": None,
         "status": "pending",
@@ -521,7 +521,7 @@ if __name__ == "__main__":
     try:
         result = solve_subtask(
             subtask=subtask,
-            db_id="concert_singer",
+            db_id="department_store",
             upstream_results=None,
             trace_id=tid,
         )

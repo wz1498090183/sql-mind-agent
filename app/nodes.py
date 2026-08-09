@@ -911,8 +911,8 @@ if __name__ == "__main__":
     # ---------- 自测 3: 端到端 plan → dispatch → aggregate ----------
     log.info("--- 自测 3: 端到端 plan→dispatch→aggregate ---")
     initial_state = init_main_state(
-        question="concert_singer 数据库中 Customers 表有多少条记录？同时列出所有产品名称。",
-        db_id="concert_singer",
+        question="department_store 数据库中 Customers 表有多少条记录？同时列出所有产品名称。",
+        db_id="department_store",
         trace_id=tid,
         max_iteration=1,
     )

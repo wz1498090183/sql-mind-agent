@@ -66,7 +66,7 @@ curl http://127.0.0.1:8000/health
 ```bash
 curl -X POST http://127.0.0.1:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"question": "Customers 表有多少条记录？", "db_id": "concert_singer"}'
+  -d '{"question": "Customers 表有多少条记录？", "db_id": "department_store"}'
 ```
 
 **请求体:**
@@ -93,7 +93,7 @@ curl -X POST http://127.0.0.1:8000/query \
 实时 SSE 流式推送每一步进度，前端可据此展示进度条/步骤指示器。
 
 ```bash
-curl -N "http://127.0.0.1:8000/query/stream?question=Customers表有多少条记录&db_id=concert_singer"
+curl -N "http://127.0.0.1:8000/query/stream?question=Customers表有多少条记录&db_id=department_store"
 ```
 
 **查询参数:**
@@ -120,7 +120,7 @@ curl -N "http://127.0.0.1:8000/query/stream?question=Customers表有多少条记
 
 ```bash
 # 命令行直接查询
-python main.py --question "Customers 表有多少条记录？" --db_id concert_singer
+python main.py --question "Customers 表有多少条记录？" --db_id department_store
 
 # 运行内置演示 Demo
 python main.py --demo

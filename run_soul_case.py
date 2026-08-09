@@ -606,11 +606,11 @@ SOUL_CASES: list[dict[str, Any]] = [
     {
         "name": "多表对比 — 客户/订单/产品 三维分析",
         "question": (
-            "concert_singer 数据库有哪些客户？总共有多少客户？"
+            "department_store 数据库有哪些客户？总共有多少客户？"
             "有多少个订单？平均每个客户下多少单？"
             "列出产品类型（product_type_code）及其产品数量。"
         ),
-        "db_id": "concert_singer",
+        "db_id": "department_store",
         "difficulty": "⭐⭐（中等）",
     },
 
@@ -620,29 +620,29 @@ SOUL_CASES: list[dict[str, Any]] = [
     {
         "name": "同比环比 — 产品类型价格对比与占比分析",
         "question": (
-            "concert_singer 数据库的 Products 表中，"
+            "department_store 数据库的 Products 表中，"
             "Hardware 类型和 Clothes 类型的产品各有多少？"
             "哪种类型产品数量更多？"
             "Hardware 产品的平均价格是多少？"
             "Clothes 产品的平均价格是多少？"
             "两种类型的平均价格相差多少？相差百分比是多少？"
         ),
-        "db_id": "concert_singer",
+        "db_id": "department_store",
         "difficulty": "⭐⭐⭐（困难）",
     },
 
     # -------------------------------------------------------
-    # Case 3: 多表关联 + 依赖链 — 客户订单关联 + 深度钻取
+    # Case 3: 多表关联 + 依赖链 — 客户订单统计 + 深度钻取
     # -------------------------------------------------------
     {
-        "name": "多表关联+依赖 — 客户订单统计 + 深度钻取联系人",
+        "name": "多表关联+依赖 — 客户订单统计 + 深度钻取地址",
         "question": (
-            "concert_singer 数据库中，哪些客户下过订单？"
+            "department_store 数据库中，哪些客户下过订单？"
             "按客户统计订单数量，列出订单最多的前 3 名客户及其订单数。"
             "另外找出订单最多的那个客户，"
-            "查询其详细联系人信息（first_name, last_name, gender, contact_phone）。"
+            "查询其在 Customer_Addresses 表中的详细地址信息（address_details, city）。"
         ),
-        "db_id": "concert_singer",
+        "db_id": "department_store",
         "difficulty": "⭐⭐⭐（困难）",
     },
 ]
