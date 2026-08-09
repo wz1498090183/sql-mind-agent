@@ -46,6 +46,14 @@ from trl import GRPOConfig, GRPOTrainer
 from app.db_utils import execute_sql
 
 # ============================================================
+# 设备检测
+# ============================================================
+_has_cuda = torch.cuda.is_available()
+_device_str = f"cuda:0 ({(torch.cuda.get_device_name(0))})" if _has_cuda else "cpu"
+print(f"使用设备: {_device_str}")
+print(f"CUDA 可用: {_has_cuda}, 显存: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB" if _has_cuda else "（将使用 CPU — GRPO 在线生成会很慢！）")
+
+# ============================================================
 # 配置常量
 # ============================================================
 
@@ -110,18 +118,23 @@ def reward_exec(completions: list[str], gold_sql: list[str], db_id: list[str], *
         - 语法错 / 不可执行 → -0.5
     """
     rewards = []
-    for comp, gold, dbid in zip(completions, gold_sql, db_id):
+    total = len(completions)
+    for i, (comp, gold, dbid) in enumerate(zip(completions, gold_sql, db_id)):
         pred_sql = extract_sql(comp)
-        pred_res = execute_sql(dbid, pred_sql)
-        gold_res = execute_sql(dbid, gold)
+        try:
+            pred_res = execute_sql(dbid, pred_sql, timeout=3.0)   # 3s 超时加速反馈
+            gold_res = execute_sql(dbid, gold, timeout=3.0)
+        except Exception as exc:
+            # 单条故障不影响整批，打日志继续
+            print(f"  [reward_exec] [{i+1}/{total}] execute_sql 异常: {exc}")
+            rewards.append(-0.5)
+            continue
 
         if not pred_res["success"]:
             r = -0.5
         elif not gold_res["success"]:
-            # gold 执行失败但生成 SQL 可执行 → 部分给分
             r = 0.2
         else:
-            # 比较结果集（忽略行顺序）
             pred_rows = set(map(tuple, pred_res["rows"]))
             gold_rows = set(map(tuple, gold_res["rows"]))
             if pred_rows == gold_rows:
@@ -129,6 +142,8 @@ def reward_exec(completions: list[str], gold_sql: list[str], db_id: list[str], *
             else:
                 r = 0.2
         rewards.append(r)
+        # 每条都打印进度，方便判断卡在哪里
+        print(f"  [reward_exec] [{i+1}/{total}] reward={r:+.1f}  db={dbid}  sql={pred_sql[:80]}")
     return rewards
 
 
@@ -151,12 +166,12 @@ config = GRPOConfig(
     output_dir=str(_project_root / "saves" / "qwen-coder-3b-grpo-sql"),
     per_device_train_batch_size=1,
     gradient_accumulation_steps=8,
-    num_generations=4,            # 每个 prompt 采样几条（12G 显存别调太大）
+    num_generations=2,            # 初次测试先减半，确认能跑通再调大
     max_prompt_length=1536,
     max_completion_length=256,
     learning_rate=1e-6,
     num_train_epochs=1,
-    logging_steps=5,
+    logging_steps=1,              # 每个 step 都输出，方便判断进度
     save_steps=200,
     bf16=True,
     gradient_checkpointing=True,
@@ -177,12 +192,23 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=bnb,
     torch_dtype=torch.bfloat16,
     trust_remote_code=True,
-    device_map={"": 0},
+    device_map={"": 0} if _has_cuda else {"": "cpu"},
 )
 
 # 4-bit 量化模型需要提前准备才能用于 LoRA 训练
-model = prepare_model_for_kbit_training(model)
-model.gradient_checkpointing_enable()
+# use_gradient_checkpointing=False：让 GRPOConfig 的 gradient_checkpointing 统一控制，避免双重启用
+model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
+# GRPOTrainer 内部会处理 gradient_checkpointing，这里不手动调用
+
+print(f"\n{'='*50}")
+print(f"训练配置：")
+print(f"  模型: {MODEL}")
+print(f"  训练样本: {len(dataset)} 条")
+print(f"  每样本生成: {config.num_generations} 条候选")
+print(f"  batch_size={config.per_device_train_batch_size} × grad_accum={config.gradient_accumulation_steps}")
+print(f"  lr={config.learning_rate}  epochs={config.num_train_epochs}")
+print(f"  bf16={config.bf16}  梯度检查点={config.gradient_checkpointing}")
+print(f"{'='*50}\n")
 
 trainer = GRPOTrainer(
     model=model,

@@ -25,7 +25,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.graph import build_main_graph
 from app.log_utils import get_logger, new_trace_id
 from app.state import SubTask, init_main_state
-from trace_store import init_trace_db, save_trace
+from app.trace_store import init_trace_db, save_trace
 
 # ============================================================
 # 常量
@@ -498,7 +498,7 @@ async def index() -> FileResponse:
     Returns:
         FileResponse: index.html 文件。
     """
-    html_path = Path(__file__).resolve().parent / "index.html"
+    html_path = Path(__file__).resolve().parent / "app" / "static" / "index.html"
     if not html_path.is_file():
         return JSONResponse(
             status_code=404,

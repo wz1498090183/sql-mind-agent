@@ -11,6 +11,10 @@ __pycache__/
 
 # Logs
 logs/
+app/logs/
+
+# macOS
+.DS_Store
 
 # Environment (contains API keys)
 .env
@@ -18,3 +22,12 @@ logs/
 # Database files
 *.db
 *.sqlite
+
+# 模型文件（大文件，不提交）
+model/
+
+# GRPO 训练输出
+saves/
+
+# 评估报告（自动生成）
+eval_report_*.json

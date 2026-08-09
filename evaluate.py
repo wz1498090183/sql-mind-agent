@@ -32,7 +32,7 @@ from app.state import SubTask, init_main_state
 # ============================================================
 # 常量
 # ============================================================
-_DEFAULT_EVAL_SET: str = "eval_set.json"
+_DEFAULT_EVAL_SET: str = "data/eval_set.json"
 _DEFAULT_TAG: str = "default"
 _DEFAULT_TIMEOUT: int = 120
 _DEFAULT_MAX_ITERATION: int = 3

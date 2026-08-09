@@ -4,7 +4,7 @@
 便于事后 badcase 排查，不引入额外中间件。
 
 用法:
-    from trace_store import init_trace_db, save_trace
+    from app.trace_store import init_trace_db, save_trace
     init_trace_db()   # 首次启动时建表
     save_trace(state) # 请求结束时落库
 """
@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 # 数据库文件路径（项目根目录）
-_DB_PATH: Path = Path(__file__).resolve().parent / "traces.db"
+_DB_PATH: Path = Path(__file__).resolve().parent.parent / "traces.db"
 
 # trace_id/question/db_id 列上的索引名
 _IDX_TRACE_ID: str = "idx_traces_trace_id"
