@@ -19,9 +19,12 @@ app/logs/
 # Environment (contains API keys)
 .env
 
-# Database files
+# Database files (生成/缓存类 sqlite，提交时需手动加例外)
 *.db
 *.sqlite
+!spider_data/database/**/*.sqlite
+!spider/database/**/*.sqlite
+!spider/database/**/*.db
 
 # 模型文件（大文件，不提交）
 model/
