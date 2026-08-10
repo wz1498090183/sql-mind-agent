@@ -40,7 +40,7 @@ if _env_path.is_file():
 import torch
 from datasets import Dataset
 from transformers import AutoTokenizer, BitsAndBytesConfig, AutoModelForCausalLM
-from peft import LoraConfig, prepare_model_for_kbit_training
+from peft import LoraConfig, prepare_model_for_kbit_training, get_peft_model
 from trl import GRPOConfig, GRPOTrainer
 
 from app.db_utils import execute_sql
@@ -51,7 +51,10 @@ from app.db_utils import execute_sql
 _has_cuda = torch.cuda.is_available()
 _device_str = f"cuda:0 ({(torch.cuda.get_device_name(0))})" if _has_cuda else "cpu"
 print(f"使用设备: {_device_str}")
-print(f"CUDA 可用: {_has_cuda}, 显存: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB" if _has_cuda else "（将使用 CPU — GRPO 在线生成会很慢！）")
+if _has_cuda:
+    print(f"CUDA 可用, 显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+else:
+    print("未检测到 CUDA，将使用 CPU — GRPO 在线生成会很慢！")
 
 # ============================================================
 # 配置常量
@@ -174,7 +177,7 @@ config = GRPOConfig(
     logging_steps=1,              # 每个 step 都输出，方便判断进度
     save_steps=200,
     bf16=True,
-    gradient_checkpointing=True,
+    gradient_checkpointing=False,  # peft 已处理，Trainer 不再重复启用（避免 4-bit 梯度链断裂）
     report_to="none",
 )
 
@@ -196,9 +199,13 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 # 4-bit 量化模型需要提前准备才能用于 LoRA 训练
-# use_gradient_checkpointing=False：让 GRPOConfig 的 gradient_checkpointing 统一控制，避免双重启用
-model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=False)
-# GRPOTrainer 内部会处理 gradient_checkpointing，这里不手动调用
+# 默认 use_gradient_checkpointing=True，peft 会自动设置输入梯度钩子（4-bit 训练必需）
+model = prepare_model_for_kbit_training(model)
+# 手动包装 PeftModel：4-bit 场景下 GRPOTrainer 的自动包装不可靠，需要显式创建
+model = get_peft_model(model, lora)
+# 验证 LoRA 参数有梯度
+trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"LoRA 可训练参数: {trainable:,}")
 
 print(f"\n{'='*50}")
 print(f"训练配置：")
@@ -215,7 +222,6 @@ trainer = GRPOTrainer(
     reward_funcs=[reward_exec, reward_format],  # 多个 reward 会自动相加
     args=config,
     train_dataset=dataset,
-    peft_config=lora,
     processing_class=tokenizer,
 )
 
