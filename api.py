@@ -14,6 +14,7 @@ FastAPI 接口模块 — Text2SQL 多步骤智能问答 API。
 
 import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, AsyncGenerator
 
@@ -37,6 +38,10 @@ _REQUEST_TIMEOUT: float = float(
 _SUBTASK_TIMEOUT: float = float(
     __import__("os").environ.get("SUBTASK_TIMEOUT_SEC", "30")
 )
+
+# 专用线程池 — 避免占用 FastAPI 默认线程池
+# graph.invoke 涉及 LLM 调用和 SQL 执行，可能长时间阻塞
+_graph_executor = ThreadPoolExecutor(max_workers=4)
 
 # 节点名称 → 中文描述映射（用于 SSE 事件 label 字段）
 _NODE_LABELS: dict[str, str] = {
@@ -212,9 +217,9 @@ async def query(req: QueryRequest) -> QueryResponse | JSONResponse:
         )
 
         async def _run_graph() -> dict[str, Any]:
-            """在线程池外执行同步 graph.invoke，避免阻塞事件循环。"""
+            """在线程池中执行同步 graph.invoke，避免阻塞事件循环。"""
             loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(None, graph.invoke, state)
+            return await loop.run_in_executor(_graph_executor, graph.invoke, state)
 
         final_state = await asyncio.wait_for(
             _run_graph(),
@@ -546,6 +551,6 @@ if __name__ == "__main__":
         "api:app",
         host="127.0.0.1",
         port=8000,
-        reload=True,
+        reload=False,
         log_level="info",
     )

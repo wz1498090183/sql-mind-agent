@@ -22,7 +22,7 @@ if str(_project_root) not in sys.path:
 from app.db_utils import get_schema
 from app.llm_client import call_json
 from app.log_utils import get_logger
-from app.state import MainState, SubTask
+from app.state import MainState, Reflection, SqlResult, SubTask
 from app.sql_subgraph import solve_subtask
 
 

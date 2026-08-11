@@ -15,16 +15,22 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-# 加载 .env 文件中的环境变量
-_env_path = _project_root / ".env"
-if _env_path.is_file():
-    with open(_env_path, encoding="utf-8") as _f:
-        for _line in _f:
-            _line = _line.strip()
-            if not _line or _line.startswith("#") or "=" not in _line:
-                continue
-            _key, _, _value = _line.partition("=")
-            os.environ.setdefault(_key.strip(), _value.strip())
+# 加载 .env 文件中的环境变量（使用 python-dotenv）
+try:
+    from dotenv import load_dotenv
+    _env_path = _project_root / ".env"
+    load_dotenv(_env_path, override=False)
+except ImportError:
+    # 若 python-dotenv 未安装，回退到手动解析
+    _env_path = _project_root / ".env"
+    if _env_path.is_file():
+        with open(_env_path, encoding="utf-8") as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if not _line or _line.startswith("#") or "=" not in _line:
+                    continue
+                _key, _, _value = _line.partition("=")
+                os.environ.setdefault(_key.strip(), _value.strip())
 
 
 def get_connection(db_id: str) -> sqlite3.Connection:

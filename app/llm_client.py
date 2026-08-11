@@ -21,17 +21,23 @@ from langchain_openai import ChatOpenAI
 from app.log_utils import get_logger
 
 # ============================================================
-# 加载 .env 文件中的环境变量
+# 加载 .env 文件中的环境变量（使用 python-dotenv）
 # ============================================================
-_env_path = Path(__file__).resolve().parent.parent / ".env"
-if _env_path.is_file():
-    with open(_env_path, encoding="utf-8") as _f:
-        for _line in _f:
-            _line = _line.strip()
-            if not _line or _line.startswith("#") or "=" not in _line:
-                continue
-            _key, _, _value = _line.partition("=")
-            os.environ.setdefault(_key.strip(), _value.strip())
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    load_dotenv(_env_path, override=False)
+except ImportError:
+    # 若 python-dotenv 未安装，回退到手动解析
+    _env_path = Path(__file__).resolve().parent.parent / ".env"
+    if _env_path.is_file():
+        with open(_env_path, encoding="utf-8") as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if not _line or _line.startswith("#") or "=" not in _line:
+                    continue
+                _key, _, _value = _line.partition("=")
+                os.environ.setdefault(_key.strip(), _value.strip())
 
 # ============================================================
 # 本地模型开关 — 后续 GRPO 微调模型无缝替换
@@ -186,8 +192,8 @@ def call_json(
                 f"尝试={attempt}/{max_retry + 1}  "
                 f"异常={type(llm_exc).__name__}: {llm_exc}"
             )
-            if attempt <= max_retry + 1:
-                continue  # 重试下一轮
+            if attempt < max_retry + 1:
+                continue  # 还有机会，重试下一轮
             # 全部重试失败
             log.error(f"call_json 全部 {max_retry + 1} 次尝试均失败")
             raise ValueError(

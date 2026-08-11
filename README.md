@@ -21,12 +21,12 @@
 ### 2. 安装依赖
 
 ```bash
-pip install fastapi uvicorn sse-starlette langgraph langchain-openai loguru sqlparse
+pip install -r requirements.txt
 ```
 
 ### 3. 配置 .env
 
-在项目根目录创建 `.env` 文件：
+将 `.env.example` 复制为 `.env`，按需修改：
 
 ```env
 LLM_API_KEY=your-api-key
@@ -126,17 +126,6 @@ python main.py --question "Customers 表有多少条记录？" --db_id departmen
 python main.py --demo
 ```
 
-## ⚠ 安全警告
-
-**当前未开启鉴权，仅限本地演示使用，切勿暴露到公网。**
-
-启动服务时会在终端打印以下警告：
-
-```
-============================================================
-  ⚠ 未开启鉴权，仅限本地演示，勿暴露公网
-============================================================
-```
 
 ## 项目结构
 
@@ -161,8 +150,35 @@ sql-mind-agent/
 ├── data/
 │   └── eval_set.json    #   评估用例
 ├── train/               # GRPO 训练（独立模块）
+├── tests/               # pytest 单元测试
 ├── tools/               # 辅助工具
 ├── spider/              # Spider 数据库
 └── spider_data/         # Spider 原始数据
 
+```
+
+## 开发
+
+### 运行测试
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/ -v
+```
+
+### 代码质量
+
+```bash
+# 代码检查
+ruff check .
+
+# 类型检查
+mypy app/
+```
+
+### Docker 部署
+
+```bash
+docker build -t sql-mind-agent .
+docker run -p 8000:8000 --env-file .env sql-mind-agent
 ```

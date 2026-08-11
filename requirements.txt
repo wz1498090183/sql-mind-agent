@@ -1,0 +1,26 @@
+# ============================================================
+# SQL Mind Agent 依赖清单
+# 安装: pip install -r requirements.txt
+# Python 版本: 3.12
+# ============================================================
+
+# —— Web 服务 ——
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+sse-starlette>=2.0.0
+
+# —— LangGraph Agent 编排 ——
+langgraph>=0.2.0
+langchain-openai>=0.2.0
+
+# —— SQL 解析 ——
+sqlparse>=0.5.0
+
+# —— 日志 ——
+loguru>=0.7.0
+
+# —— 环境变量管理 ——
+python-dotenv>=1.0.0
+
+# —— 开发依赖（可选） ——
+# pip install -r requirements-dev.txt

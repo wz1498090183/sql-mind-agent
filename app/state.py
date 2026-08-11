@@ -1,8 +1,10 @@
 """
 LangGraph 多步骤 Text2SQL Agent 的状态定义模块。
 
-本模块定义了三个 TypedDict 和一个工厂函数，覆盖：
+本模块定义了 TypedDict 类型和工厂函数，覆盖：
 - SubTask：单个子任务的完整生命周期数据
+- SqlResult：SQL 执行结果结构
+- Reflection：反思审查结果结构
 - SubGraphState：SQL 求解子图（生成→校验→执行→重试）的内部状态
 - MainState：主图（拆解→调度→聚合→反思）的全局状态
 
@@ -11,6 +13,25 @@ LangGraph 多步骤 Text2SQL Agent 的状态定义模块。
 
 import operator
 from typing import Annotated, TypedDict
+
+# ============================================================
+# 0. 基础数据结构
+# ============================================================
+class SqlResult(TypedDict):
+    """SQL 执行结果结构（db_utils.execute_sql 返回值）。"""
+
+    success: bool
+    columns: list[str]
+    rows: list[tuple]
+    error: str | None
+
+
+class Reflection(TypedDict):
+    """反思审查结果结构（由 reflect_node 写入，route_after_reflect 消费）。"""
+
+    passed: bool
+    reason: str
+    fix_hint: str
 
 # ============================================================
 # 1. SubTask — 单个子任务
@@ -30,8 +51,7 @@ class SubTask(TypedDict):
     # 写入节点: gen_sql（子图） — SQL 生成后写入
     sql: str | None
     # 写入节点: execute_sql（子图 / db_utils） — 执行后写入
-    # 结构: {"success": bool, "columns": list[str], "rows": list[tuple], "error": str | None}
-    result: dict | None
+    result: SqlResult | None
     # 写入节点: planner（主图）初始为 "pending"；后续由 dispatch/supervisor 节点更新
     status: str
     # 写入节点: validate / execute（子图） — 校验或执行失败时写入
@@ -80,8 +100,7 @@ class MainState(TypedDict):
     # 写入节点: aggregator（主图） — 合并所有已完成子任务的结果
     aggregated_answer: str | None
     # 写入节点: reflector（主图） — 反思聚合答案是否通过校验
-    # 结构: {"passed": bool, "reason": str}
-    reflection: dict | None
+    reflection: Reflection | None
 
     # 写入节点: reflector（主图） — 每次反思时自增
     iteration: int

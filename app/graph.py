@@ -23,7 +23,7 @@ from app.nodes import (
     plan_node,
     reflect_node,
 )
-from app.state import MainState
+from app.state import MainState, Reflection
 
 
 def route_after_reflect(state: MainState) -> Literal["finalize", "retry", "degrade"]:
@@ -42,11 +42,11 @@ def route_after_reflect(state: MainState) -> Literal["finalize", "retry", "degra
     Returns:
         路由目标字符串。
     """
-    reflection = state.get("reflection", {})
+    reflection: Reflection | None = state.get("reflection")  # type: ignore[assignment]
     iteration: int = state.get("iteration", 0)
     max_iteration: int = state.get("max_iteration", 3)
 
-    if reflection.get("passed", False):
+    if reflection and reflection.get("passed", False):
         return "finalize"
 
     if iteration < max_iteration - 1:

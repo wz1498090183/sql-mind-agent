@@ -6,6 +6,7 @@ SQL 求解子图模块。
 每个子任务在此子图内完成 SQL 生成、校验、执行、重试闭环。
 """
 
+import os
 import re
 import sys
 import time
@@ -333,12 +334,15 @@ def _retry_decision_node(state: SubGraphState) -> dict:
     trace_id: str = subtask.get("id", "-")
     log = get_logger(trace_id)
 
+    # 从环境变量读取最大重试次数（默认 1 次，即共 2 次尝试）
+    _sql_retry_max: int = int(os.environ.get("SQL_RETRY_MAX", "1"))
+
     if subtask.get("status") == "success":
         log.info("retry_decision: status=success → 路由到 END")
         return {"subtask": subtask}
 
     retry_count = subtask.get("retry_count", 0)
-    if retry_count < 1:
+    if retry_count < _sql_retry_max:
         subtask["retry_count"] = retry_count + 1
         # 保留 error，供 generate_sql_node 重试时使用
         subtask["status"] = "running"
@@ -349,7 +353,7 @@ def _retry_decision_node(state: SubGraphState) -> dict:
     else:
         subtask["status"] = "failed"
         log.error(
-            f"retry_decision: retry_count={retry_count} >= 1  "
+            f"retry_decision: retry_count={retry_count} >= {_sql_retry_max}  "
             f"放弃重试，status=failed  error={subtask.get('error', '-')}"
         )
 
