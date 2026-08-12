@@ -162,12 +162,12 @@ def compare_sql_results(
     if not gold_ok:
         return False, f"gold_sql 执行失败（评估数据可能有问题）: {gold_result.get('error', '未知')}"
 
-    # 比较列集
-    agent_cols = set(agent_result.get("columns", []))
-    gold_cols = set(gold_result.get("columns", []))
-    if agent_cols != gold_cols:
+    # 比较列数（不比较列名，因为 SELECT price AS p 和 SELECT price 列名不同但数据相同）
+    agent_col_count = len(agent_result.get("columns", []))
+    gold_col_count = len(gold_result.get("columns", []))
+    if agent_col_count != gold_col_count:
         return False, (
-            f"列集不一致: Agent={sorted(agent_cols)}, Gold={sorted(gold_cols)}"
+            f"列数不一致: Agent={agent_col_count}, Gold={gold_col_count}"
         )
 
     # 规范化后比较行集
@@ -303,6 +303,7 @@ def evaluate_one(
                 # 策略：如果有多个子任务，尝试找匹配 gold 的那个（通过结果集对比）
                 best_match = False
                 best_detail = ""
+                fail_detail = ""  # 记录最后一条不匹配的原因
                 for detail_item in result["subtask_details"]:
                     if detail_item["status"] != "success":
                         continue
@@ -315,9 +316,16 @@ def evaluate_one(
                     if is_match:
                         best_match = True
                         best_detail = desc
+                    else:
+                        fail_detail = desc
 
                 result["sql_accuracy"] = best_match
-                result["sql_accuracy_detail"] = best_detail or "未找到成功子任务可对比"
+                if best_match:
+                    result["sql_accuracy_detail"] = best_detail
+                elif fail_detail:
+                    result["sql_accuracy_detail"] = fail_detail
+                else:
+                    result["sql_accuracy_detail"] = "未找到成功子任务可对比"
 
         log.info(
             f"evaluate_one 完成  status={final_status}  "
@@ -594,11 +602,11 @@ def main() -> None:
         sql_acc = eval_result.get("sql_accuracy")
         sql_str = ""
         if sql_acc is True:
-            sql_str = "  SQL✓"
+            sql_str = "  SQL=PASS"
         elif sql_acc is False:
-            sql_str = "  SQL✗"
+            sql_str = "  SQL=FAIL"
         elif sql_acc is None:
-            sql_str = "  SQL-"
+            sql_str = "  SQL=N/A"
 
         print(f"→ {status}  {elapsed:.0f}ms  iter={eval_result['iterations']}{sql_str}")
 
@@ -619,9 +627,9 @@ def main() -> None:
     # 返回码：全部成功 → 0，有失败 → 1
     failed = metrics["error_count"] + metrics["timeout_count"]
     if failed > 0:
-        print(f"⚠ {failed} 条用例未正常完成（超时/异常）")
+        print(f"[WARN] {failed} 条用例未正常完成（超时/异常）")
     if metrics["sql_accuracy"] is not None and metrics["sql_accuracy"] < 1.0:
-        print(f"⚠ SQL 准确率 < 100%，详见报告文件中的 subtask_details.sql_match_gold 字段")
+        print(f"[WARN] SQL 准确率 < 100%，详见报告文件中的 subtask_details.sql_match_gold 字段")
 
     sys.exit(0 if failed == 0 else 1)
 
