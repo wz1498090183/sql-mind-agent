@@ -29,11 +29,23 @@ pip install -r requirements.txt
 将 `.env.example` 复制为 `.env`，按需修改：
 
 ```env
+# 远端 API 模型（USE_LOCAL_MODEL=false 时使用）
 LLM_API_KEY=your-api-key
 LLM_BASE_URL=https://api.deepseek.com
 LLM_MODEL=deepseek-v4-pro
+
+# 本地 vLLM 模型（USE_LOCAL_MODEL=true 时使用）
+LOCAL_LLM_API_KEY=EMPTY
+LOCAL_LLM_BASE_URL=http://localhost:8000/v1
+LOCAL_LLM_MODEL=Qwen2.5-Coder-3B-Instruct
+
+# 模型切换开关：true 用本地 vLLM，false 用远端 API
+USE_LOCAL_MODEL=false
+
 SPIDER_DB_ROOT=./spider/database
 ```
+
+> 切换本地模型：将 `USE_LOCAL_MODEL` 改为 `true`，并确保 vLLM 服务已启动（如 `vllm serve Qwen/Qwen2.5-Coder-3B-Instruct --port 8000`）。
 
 ### 4. 启动 Web 服务
 

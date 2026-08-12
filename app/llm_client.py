@@ -1,7 +1,10 @@
 """
 LLM 客户端模块。
-统一封装 LLM 调用，支持结构化 JSON 输出，预留本地模型切换。
-使用 langchain_openai.ChatOpenAI，从 .env 读取 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL。
+统一封装 LLM 调用，支持结构化 JSON 输出。
+使用 langchain_openai.ChatOpenAI，从 .env 读取两套模型配置：
+    - 远端 API：LLM_API_KEY / LLM_BASE_URL / LLM_MODEL
+    - 本地 vLLM：LOCAL_LLM_API_KEY / LOCAL_LLM_BASE_URL / LOCAL_LLM_MODEL
+根据 USE_LOCAL_MODEL 开关在两者之间切换。
 """
 
 import json
@@ -40,7 +43,7 @@ except ImportError:
                 os.environ.setdefault(_key.strip(), _value.strip())
 
 # ============================================================
-# 本地模型开关 — 后续 GRPO 微调模型无缝替换
+# 本地模型开关 — 在远端 API 与本地 vLLM 之间切换
 # ============================================================
 USE_LOCAL_MODEL = (
     os.environ.get("USE_LOCAL_MODEL", "False").lower() in ("1", "true", "yes")
@@ -50,14 +53,17 @@ USE_LOCAL_MODEL = (
 def get_llm(temperature: float = 0.0) -> ChatOpenAI:
     """返回配置好的 ChatOpenAI 实例。
 
-    从环境变量读取 API 配置：
-        - LLM_API_KEY: API 密钥
-        - LLM_BASE_URL: API 基础 URL（兼容 OpenAI / DeepSeek / 本地服务）
-        - LLM_MODEL: 模型名称
-        - LLM_REQUEST_TIMEOUT: LLM 单次调用超时秒数，默认 60s
+    根据 USE_LOCAL_MODEL 开关从环境变量读取两套配置：
+        - USE_LOCAL_MODEL=false（默认）：远端 API
+            - LLM_API_KEY: API 密钥
+            - LLM_BASE_URL: API 基础 URL（兼容 OpenAI / DeepSeek）
+            - LLM_MODEL: 模型名称
+        - USE_LOCAL_MODEL=true：本地 vLLM（OpenAI 兼容接口）
+            - LOCAL_LLM_API_KEY: 本地 API 密钥（vLLM 无鉴权时用 EMPTY 占位）
+            - LOCAL_LLM_BASE_URL: 本地 vLLM 基础 URL
+            - LOCAL_LLM_MODEL: 本地模型名称（通常为 GRPO 微调后的 Qwen）
 
-    当 USE_LOCAL_MODEL=True 时打印 TODO 提示，但仍使用相同接口，
-    便于后续 GRPO 微调模型无缝替换。
+    两种模式共用 LLM_REQUEST_TIMEOUT（单次调用超时秒数，默认 60s）。
 
     Args:
         temperature: 采样温度，默认 0.0（确定性输出，适合 SQL 生成 / JSON 解析）。
@@ -65,17 +71,23 @@ def get_llm(temperature: float = 0.0) -> ChatOpenAI:
     Returns:
         ChatOpenAI: 配置完成的 LLM 客户端实例。
     """
-    if USE_LOCAL_MODEL:
-        # TODO: 本地模型切换 — 后续替换为本地 vLLM/Ollama 部署的 GRPO 微调模型
-        print("TODO本地模型: 当前仍使用 LLM_API_KEY/LLM_BASE_URL/LLM_MODEL 配置的远端接口")
-
     # LLM 单次调用超时（可通过环境变量 LLM_REQUEST_TIMEOUT 覆盖，默认 60s）
     llm_timeout = float(os.environ.get("LLM_REQUEST_TIMEOUT", "60"))
 
+    if USE_LOCAL_MODEL:
+        # 本地 vLLM（OpenAI 兼容接口）— 通常为 GRPO 微调后的 Qwen 模型
+        api_key = os.environ.get("LOCAL_LLM_API_KEY", "EMPTY")
+        base_url = os.environ.get("LOCAL_LLM_BASE_URL", "http://localhost:8000/v1")
+        model = os.environ.get("LOCAL_LLM_MODEL", "Qwen2.5-Coder-3B-Instruct")
+    else:
+        api_key = os.environ.get("LLM_API_KEY", "sk-placeholder")
+        base_url = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
+        model = os.environ.get("LLM_MODEL", "gpt-4o")
+
     return ChatOpenAI(
-        api_key=os.environ.get("LLM_API_KEY", "sk-placeholder"),
-        base_url=os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1"),
-        model=os.environ.get("LLM_MODEL", "gpt-4o"),
+        api_key=api_key,
+        base_url=base_url,
+        model=model,
         temperature=temperature,
         request_timeout=llm_timeout,
     )
