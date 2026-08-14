@@ -34,3 +34,6 @@ saves/
 
 # 评估报告（自动生成）
 eval_report_*.json
+
+# 环境创建
+env.txt
