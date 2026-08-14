@@ -198,3 +198,4 @@ docker run -p 8000:8000 --env-file .env sql-mind-agent
 ![运行界面1](docs/images/ScreenShot_2026-08-14_101922_828.png)
 ![运行界面2](docs/images/ScreenShot_2026-08-14_102527_994.png)
 ![前端界面3](docs/images/ScreenShot_2026-08-14_105832_237.png)
+![grpo过程日志](docs/images/grpo过程日志.png)
