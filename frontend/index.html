@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL Mind Agent — Text2SQL 可视化演示</title>
+
+  <!-- CDN 引入 TailwindCSS / FontAwesome，本地无 node_modules -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body class="min-h-screen flex flex-col items-center">
+
+  <!-- 头部 -->
+  <header class="header">
+    <h1><i class="fa-solid fa-brain"></i> SQL Mind Agent</h1>
+    <p>Text2SQL 多步骤智能问答 — 实时执行可视化</p>
+  </header>
+
+  <!-- 输入区 -->
+  <div class="input-card">
+    <div class="input-row">
+      <input type="text" id="questionInput"
+             placeholder="输入你的问题，例如：Customers 表有多少条记录？"
+             autocomplete="off">
+      <select class="db-select" id="dbSelect">
+        <option value="department_store">department_store</option>
+        <option value="concert_singer">concert_singer</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="submitBtn">
+        <i class="fa-solid fa-bolt"></i> 开始查询
+      </button>
+      <button class="btn btn-ghost" id="clearBtn">
+        <i class="fa-solid fa-trash"></i> 清空
+      </button>
+    </div>
+  </div>
+
+  <!-- 状态栏 -->
+  <div class="status-bar">
+    <span class="status-dot idle" id="statusDot"></span>
+    <span id="statusText">就绪</span>
+  </div>
+
+  <!-- 时间线 -->
+  <div class="timeline" id="timeline"></div>
+
+  <!-- 最终答案 -->
+  <div id="answerArea"></div>
+
+  <!-- 元信息 -->
+  <div class="meta-row" id="metaRow"></div>
+
+  <!-- 轻提示容器 -->
+  <div class="toast-box" id="toastBox"></div>
+
+  <!-- 通用弹窗 -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span id="modalTitle">提示</span>
+        <button class="modal-close" id="modalClose"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <!-- 入口：原生 ES Module，无打包 -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# 训练镜像构建上下文（grpo-train/）忽略项
+__pycache__/
+*.py[cod]
+*.log
+saves/
+outputs/

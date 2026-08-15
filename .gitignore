@@ -1,39 +1,55 @@
-# Python
+# ============================================================
+# SQL Mind Agent .gitignore
+# 忽略模型权重、训练产物、数据库、缓存等大文件/运行产物
+# ============================================================
+
+# ---------- Python ----------
 __pycache__/
 *.py[cod]
 *.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# IDE
+# ---------- IDE ----------
 .vscode/
+.idea/
 
-# Claude
+# ---------- Claude Code ----------
 .claude/
 
-# Logs
+# ---------- 日志 ----------
 logs/
-app/logs/
+*.log
 
-# macOS
+# ---------- 系统 ----------
 .DS_Store
+Thumbs.db
 
-# Environment (contains API keys)
+# ---------- 环境变量（含密钥，不入库） ----------
 .env
 
-# Database files (生成/缓存类 sqlite，提交时需手动加例外)
+# ---------- 数据库文件 ----------
+# 运行时/缓存类 sqlite；spider_data 数据集需随仓库分发时手动加例外
 *.db
 *.sqlite
 !spider_data/database/**/*.sqlite
-!spider/database/**/*.sqlite
-!spider/database/**/*.db
 
-# 模型文件（大文件，不提交）
+# ---------- 模型权重（宿主机挂载，自行准备/下载） ----------
 model/
+models/*
+!models/.gitkeep
 
-# GRPO 训练输出
+# ---------- GRPO 训练输出 ----------
 saves/
+outputs/
+grpo-train/saves/
+grpo-train/outputs/
 
-# 评估报告（自动生成）
+# ---------- 评估报告（自动生成） ----------
 eval_report_*.json
 
-# 环境创建
+# ---------- 环境创建 ----------
 env.txt

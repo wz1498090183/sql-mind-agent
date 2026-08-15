@@ -1,0 +1,9 @@
+# 推理镜像构建上下文（backend/）忽略项
+__pycache__/
+*.py[cod]
+*.log
+logs/
+.pytest_cache/
+tests/
+*.db
+*.sqlite

@@ -1,0 +1,10 @@
+# GRPO 训练依赖（GPU 环境，体积大，独立于推理后端镜像）
+# torch 由基镜像 pytorch/pytorch 提供，此处不再重复安装
+trl
+peft
+transformers
+datasets
+accelerate
+bitsandbytes
+sqlparse
+python-dotenv

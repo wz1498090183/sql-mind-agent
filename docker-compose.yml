@@ -1,0 +1,124 @@
+# ============================================================
+# SQL Mind Agent — Docker Compose 多服务编排
+#
+# 默认启动（无 GPU 也能跑 Demo，走远端 DeepSeek）：
+#     docker compose up -d
+# 本地 vLLM 推理（需 GPU，.env 设 USE_LOCAL_MODEL=true）：
+#     docker compose --profile vllm up -d
+# GRPO 训练（需 GPU，可选扩展）：
+#     docker compose --profile train up -d
+# ============================================================
+
+name: sql-mind-agent
+
+services:
+  # ---------- 前端静态服务（Nginx，代理 /api 到后端） ----------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sma-frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - agent-net
+    restart: unless-stopped
+
+  # ---------- Agent 在线推理后端（FastAPI + LangGraph） ----------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sma-backend
+    env_file: .env
+    environment:
+      USE_LOCAL_MODEL: ${USE_LOCAL_MODEL:-false}
+      # 容器内通过服务名访问 vllm；默认走远端 DeepSeek，此值不生效
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://vllm:8000/v1}
+      SPIDER_DB_ROOT: /app/spider_data/database
+      TRACE_DB_PATH: /app/data/traces.db
+    volumes:
+      # Spider 数据集只读挂载；运行时 SQLite 数据落 ./data 持久化
+      - ./spider_data:/app/spider_data:ro
+      - ./data:/app/data
+    # 调试用：直接暴露后端；正式环境可去掉此端口映射（仅经 Nginx 访问）
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    networks:
+      - agent-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ---------- vLLM 本地推理（可选，官方镜像，无需本地构建） ----------
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: sma-vllm
+    profiles: ["vllm"]
+    command:
+      - "--model"
+      - "${VLLM_MODEL_PATH:-/models/Qwen2.5-Coder-3B-Instruct}"
+      - "--served-model-name"
+      - "${VLLM_MODEL_NAME:-Qwen2.5-Coder-3B-Instruct}"
+      - "--max-model-len"
+      - "${VLLM_MAX_MODEL_LEN:-8192}"
+      - "--gpu-memory-utilization"
+      - "${VLLM_GPU_MEMORY_UTILIZATION:-0.9}"
+    environment:
+      # 私有模型需要 HuggingFace Token，公开模型留空即可
+      HUGGING_FACE_HUB_TOKEN: ${HF_TOKEN:-}
+    volumes:
+      # 模型权重挂载自宿主机 ./models，不写入镜像
+      - ${HOST_MODELS_DIR:-./models}:/models
+    ports:
+      - "${VLLM_PORT:-8001}:8000"
+    ipc: host
+    shm_size: 16g
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - agent-net
+    restart: unless-stopped
+
+  # ---------- GRPO 强化学习训练（可选，独立镜像） ----------
+  grpo-train:
+    build:
+      context: ./grpo-train
+      dockerfile: Dockerfile
+    container_name: sma-grpo-train
+    profiles: ["train"]
+    env_file: .env
+    environment:
+      SPIDER_DB_ROOT: /app/spider_data/database
+    volumes:
+      - ./spider_data:/app/spider_data:ro
+      - ./grpo-train/saves:/app/saves
+      - ${HOST_MODELS_DIR:-./models}:/models
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - agent-net
+    restart: "no"
+
+# ---------- 自定义桥接网络：容器内用服务名互通 ----------
+networks:
+  agent-net:
+    driver: bridge
