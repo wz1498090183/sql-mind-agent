@@ -16,11 +16,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# 数据库文件路径（可通过 TRACE_DB_PATH 环境变量覆盖，默认项目根目录）
+# 数据库文件路径（可通过 TRACE_DB_PATH 环境变量覆盖，默认 backend/data/）
 _DB_PATH: Path = Path(
     os.environ.get(
         "TRACE_DB_PATH",
-        str(Path(__file__).resolve().parent.parent / "traces.db"),
+        str(Path(__file__).resolve().parent.parent / "data" / "traces.db"),
     )
 )
 
@@ -50,7 +50,7 @@ def init_trace_db(db_path: str | None = None) -> str:
     同时在 trace_id / question / db_id 上建索引，加速排查。
 
     Args:
-        db_path: 可选，自定义数据库文件路径，默认项目根目录 traces.db。
+        db_path: 可选，自定义数据库文件路径，默认 backend/data/traces.db。
 
     Returns:
         str: 实际使用的数据库文件绝对路径。

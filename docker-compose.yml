@@ -41,9 +41,9 @@ services:
       SPIDER_DB_ROOT: /app/spider_data/database
       TRACE_DB_PATH: /app/data/traces.db
     volumes:
-      # Spider 数据集只读挂载；运行时 SQLite 数据落 ./data 持久化
+      # Spider 数据集只读挂载；运行时 SQLite 数据落 ./backend/data 持久化
       - ./spider_data:/app/spider_data:ro
-      - ./data:/app/data
+      - ./backend/data:/app/data
     # 调试用：直接暴露后端；正式环境可去掉此端口映射（仅经 Nginx 访问）
     ports:
       - "${BACKEND_PORT:-8000}:8000"

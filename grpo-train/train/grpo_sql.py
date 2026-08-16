@@ -60,8 +60,8 @@ else:
 # 配置常量
 # ============================================================
 
-# 模型路径（优先本地 ./model，其次容器挂载 /models，最后回退 HuggingFace ID）
-_MODEL_LOCAL = str(_project_root.parent / "model" / "Qwen2.5-Coder-3B-Instruct")
+# 模型路径（优先本地 ./models，其次容器挂载 /models，最后回退 HuggingFace ID）
+_MODEL_LOCAL = str(_project_root.parent / "models" / "Qwen2.5-Coder-3B-Instruct")
 _MODEL_MOUNT = "/models/Qwen2.5-Coder-3B-Instruct"
 MODEL = (
     _MODEL_LOCAL if Path(_MODEL_LOCAL).exists()

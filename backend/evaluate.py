@@ -33,8 +33,8 @@ from app.state import SubTask, init_main_state
 # ============================================================
 # 常量
 # ============================================================
-# 默认评估集（data/ 位于仓库根，即 backend/ 的上一级）
-_DEFAULT_EVAL_SET: str = str(_project_root.parent / "data" / "eval_set.json")
+# 默认评估集（data/ 位于 backend/ 内，与运行时 traces.db 同目录）
+_DEFAULT_EVAL_SET: str = str(_project_root / "data" / "eval_set.json")
 _DEFAULT_TAG: str = "default"
 _DEFAULT_TIMEOUT: int = 120
 _DEFAULT_MAX_ITERATION: int = 3

@@ -38,7 +38,6 @@ Thumbs.db
 !spider_data/database/**/*.sqlite
 
 # ---------- 模型权重（宿主机挂载，自行准备/下载） ----------
-model/
 models/*
 !models/.gitkeep
 

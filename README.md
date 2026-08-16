@@ -74,7 +74,32 @@ docker compose --profile train up -d
 # 训练产物输出到 grpo-train/saves/
 ```
 
-### 6. 停止 / 清理
+### 6. 合并 LoRA（训练后，供 vLLM 部署）
+
+GRPO 训练只产出 LoRA adapter（`grpo-train/saves/qwen-coder-3b-grpo-sql/final/`），vLLM 无法直接加载，需先合并回基座模型：
+
+```bash
+cd grpo-train
+python train/merge_lora.py
+```
+
+合并产物（完整 bf16 权重 + tokenizer）输出到 `grpo-train/saves/qwen-coder-3b-grpo-sql/merged/`，把它放入宿主机模型目录并让 vLLM 指向它：
+
+```bash
+cp -r grpo-train/saves/qwen-coder-3b-grpo-sql/merged ./models/qwen-coder-3b-grpo-sql
+```
+
+在 `.env` 中把 vLLM 指向合并后的模型（`VLLM_MODEL_NAME` 即 served 名，需与 `LOCAL_LLM_MODEL` 一致）：
+
+```dotenv
+VLLM_MODEL_PATH=/models/qwen-coder-3b-grpo-sql
+VLLM_MODEL_NAME=qwen-coder-3b-grpo-sql
+LOCAL_LLM_MODEL=qwen-coder-3b-grpo-sql
+```
+
+再按第 4 步（`USE_LOCAL_MODEL=true`）启动 vLLM 即可走本地合并模型推理。
+
+### 7. 停止 / 清理
 
 ```bash
 docker compose down
@@ -86,7 +111,7 @@ docker compose --profile vllm --profile train down
 - **前端零构建**：浏览器原生 ES Module 多文件拆分（`api.js` / `chatStore.js` / `uiRender.js` / `main.js`），Nginx 托管 + `/api` 反向代理解决跨域，后端无需开启 CORS，无 Node 编译打包；
 - **SSE 流式通信**：Nginx 关闭缓冲、延长超时，实时推送「规划 → 调度 → 聚合 → 反思」每步进度；
 - **Profile 按需加载**：默认 `docker compose up` 仅启动 frontend + backend；`--profile vllm` 启用本地推理，`--profile train` 启用训练；
-- **健康检查 + 重启策略 + GPU 资源声明 + 环境变量统一读取 .env**，SQLite 运行数据经 `./data` 卷持久化；
+- **健康检查 + 重启策略 + GPU 资源声明 + 环境变量统一读取 .env**，SQLite 运行数据经 `./backend/data` 卷持久化；
 - **自定义桥接网络 agent-net**，容器内以服务名相互通信。
 
 ## API 接口
@@ -164,14 +189,15 @@ sql-mind-agent/
 │   ├── evaluate.py           # 批量评估
 │   ├── run_soul_case.py      # 灵魂 Case 演示
 │   ├── app/                  # 核心 Agent 包
+│   ├── data/                 # 运行时 SQLite 数据（traces.db）+ 评估集 eval_set.json
 │   └── tests/                # pytest 单元测试
 ├── grpo-train/               # GRPO 训练（独立镜像，Profile 按需启动）
 │   ├── Dockerfile
 │   ├── requirements.txt
+│   ├── saves/                # 训练产物（checkpoint / LoRA adapter，gitignore）
 │   └── train/
 ├── spider_data/              # Spider 数据集与 SQLite 库（宿主机只读挂载）
-├── models/                   # 本地 vLLM 模型权重（宿主机挂载，gitignore）
-└── data/                     # 运行时 SQLite 数据（traces.db 持久化，gitignore）
+└── models/                   # 本地 vLLM 模型权重（宿主机挂载，gitignore）
 ```
 
 ## 本地开发
@@ -191,8 +217,11 @@ mypy app/
 
 > 本地运行后端时，`.env` 可放在仓库根（与 Docker Compose 共用）或 `backend/.env`；`SPIDER_DB_ROOT` 相对路径按仓库根解析，即 `./spider_data/database`。
 
-
+## 应用效果示例
 ![运行界面1](docs/images/ScreenShot_2026-08-14_101922_828.png)
 ![运行界面2](docs/images/ScreenShot_2026-08-14_102527_994.png)
 ![前端界面3](docs/images/ScreenShot_2026-08-14_105832_237.png)
+
+## 模型效果示例
 ![grpo过程日志](docs/images/grpo过程日志.png)
+![Lora与基模合并](docs/images/Lora与基模合并.png)
