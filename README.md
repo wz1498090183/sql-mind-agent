@@ -284,3 +284,6 @@ mypy app/
 ## 模型效果示例
 ![grpo过程日志](docs/images/grpo过程日志.png)
 ![Lora与基模合并](docs/images/Lora与基模合并.png)
+### grpo前后
+![grpo前效果](docs/images/grpo前效果.png)
+![grpo后效果](docs/images/grpo后效果.png)
