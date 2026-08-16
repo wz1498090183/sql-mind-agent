@@ -19,7 +19,7 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from app.db_utils import get_schema
+from app.db_utils import get_schema, get_value_samples
 from app.llm_client import call_json
 from app.log_utils import get_logger
 from app.state import MainState, Reflection, SqlResult, SubTask
@@ -36,6 +36,8 @@ _PLAN_PROMPT = """你是一个 Text2SQL 任务规划专家。根据用户提出�
 
 ## 数据库 Schema
 {schema}
+
+{value_samples}
 
 ## 拆解规则
 1. 简单问题可以只拆 1 个子任务。
@@ -192,6 +194,13 @@ def plan_node(state: MainState) -> dict[str, Any]:
     schema = get_schema(db_id)
     log.info(f"plan_node 拉取 Schema 完成  schema长度={len(schema)}")
 
+    # 值检索：抽取低基数类别列样本值，帮助实体模糊匹配
+    value_samples = ""
+    try:
+        value_samples = get_value_samples(db_id)
+    except Exception as e:
+        log.warning(f"plan_node 值检索失败，跳过: {e}")
+
     # 构造 reflection 信息
     reflection = state.get("reflection")
     reflection_block = ""
@@ -203,6 +212,7 @@ def plan_node(state: MainState) -> dict[str, Any]:
     prompt = _PLAN_PROMPT.format(
         question=question,
         schema=schema if schema else "（无 Schema，请根据问题推断）",
+        value_samples=value_samples or "（无列样本值）",
         examples=_PLAN_FEW_SHOT,
         reflection_block=reflection_block,
     )

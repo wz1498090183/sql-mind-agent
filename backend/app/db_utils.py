@@ -215,6 +215,62 @@ def get_schema_dict(db_id: str) -> dict[str, list[str]]:
         conn.close()
 
 
+# 低基数类别列的列名后缀（这些列的值通常是有限枚举，适合做值检索）
+_CATEGORICAL_SUFFIXES: tuple[str, ...] = (
+    "_code", "_type", "_status", "_name", "_gender", "_title",
+    "_method", "_category",
+)
+
+
+def get_value_samples(db_id: str, max_cols: int = 12, max_values: int = 8) -> str:
+    """值检索：抽取低基数类别列的去重样本值，注入 Prompt 帮助实体匹配。
+
+    Text2SQL 的常见失败模式：LLM 写 WHERE 条件时凭空猜测枚举值（如把
+    product_type_code 写成 'Electronics'），而真实库里是 'Hardware'。
+    本函数扫描各表列名后缀命中 _CATEGORICAL_SUFFIXES 的列（如 *_code、
+    *_type、*_status、*_name），抽取其 DISTINCT 样本值，注入 Prompt 后
+    可显著提升筛选条件的实体匹配准确率。
+
+    Args:
+        db_id: 数据库标识符。
+        max_cols: 最多抽样多少列，防止单次请求触发过多 SQL 查询。
+        max_values: 每列最多取多少个样本值。
+
+    Returns:
+        str: 格式化后的样本值文本，未命中任何列时返回空字符串。
+    """
+    schema_dict = get_schema_dict(db_id)
+    conn = get_connection(db_id)
+    lines: list[str] = []
+    sampled: int = 0
+    try:
+        for table, columns in schema_dict.items():
+            for col in columns:
+                if not col.lower().endswith(_CATEGORICAL_SUFFIXES):
+                    continue
+                if sampled >= max_cols:
+                    break
+                try:
+                    rows = conn.execute(
+                        f'SELECT DISTINCT "{col}" FROM "{table}" LIMIT {max_values}'
+                    ).fetchall()
+                except sqlite3.Error:
+                    continue
+                values = [str(r[0]) for r in rows if r[0] is not None]
+                if not values:
+                    continue
+                lines.append(f"- {table}.{col}: " + ", ".join(values))
+                sampled += 1
+            if sampled >= max_cols:
+                break
+    finally:
+        conn.close()
+
+    if not lines:
+        return ""
+    return "## 关键列样本值（枚举值，供 WHERE 条件实体匹配参考）\n" + "\n".join(lines)
+
+
 # ============================================================
 # 自测
 # ============================================================

@@ -28,5 +28,85 @@
         "question": "Hardware 类型和 Clothes 类型的产品各有多少？哪种类型产品数量更多？两种类型的平均价格相差多少？",
         "db_id": "department_store",
         "gold_sql": "SELECT product_type_code, COUNT(*), AVG(product_price) FROM Products WHERE product_type_code IN ('Hardware', 'Clothes') GROUP BY product_type_code"
+    },
+    {
+        "question": "Products 表中有多少种不同的产品类型？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT count(DISTINCT product_type_code) FROM products"
+    },
+    {
+        "question": "最便宜的产品的 id 和产品类型是什么？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_id, product_type_code FROM products ORDER BY product_price LIMIT 1"
+    },
+    {
+        "question": "Clothes 类型产品的平均价格是多少？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT avg(product_price) FROM products WHERE product_type_code = 'Clothes'"
+    },
+    {
+        "question": "最贵的 Hardware 产品的名称是什么？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_name FROM products WHERE product_type_code = 'Hardware' ORDER BY product_price DESC LIMIT 1"
+    },
+    {
+        "question": "列出价格在 600 到 700 之间的产品的名称和 id。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_name, product_id FROM products WHERE product_price BETWEEN 600 AND 700"
+    },
+    {
+        "question": "列出地址包含 TN 的客户的名称和 id。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT customer_name, customer_id FROM customers WHERE customer_address LIKE '%TN%'"
+    },
+    {
+        "question": "查询所有客户和供应商的电话号码。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT customer_phone FROM customers UNION SELECT supplier_phone FROM suppliers"
+    },
+    {
+        "question": "每种支付方式分别有多少客户使用？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT payment_method_code, count(*) FROM customers GROUP BY payment_method_code"
+    },
+    {
+        "question": "被下单次数最多的产品 id 是什么？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_id FROM order_items GROUP BY product_id ORDER BY count(*) DESC LIMIT 1"
+    },
+    {
+        "question": "每种产品类型的最高价和最低价是多少？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_type_code, max(product_price), min(product_price) FROM products GROUP BY product_type_code"
+    },
+    {
+        "question": "平均价格高于所有产品平均价格的产品类型是哪些？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT product_type_code FROM products GROUP BY product_type_code HAVING avg(product_price) > (SELECT avg(product_price) FROM products)"
+    },
+    {
+        "question": "门店数量最多的两个连锁品牌 id 是什么？",
+        "db_id": "department_store",
+        "gold_sql": "SELECT dept_store_chain_id FROM department_stores GROUP BY dept_store_chain_id ORDER BY count(*) DESC LIMIT 2"
+    },
+    {
+        "question": "查询客户 10 的地址。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT T1.address_details FROM addresses AS T1 JOIN customer_addresses AS T2 ON T1.address_id = T2.address_id WHERE T2.customer_id = 10"
+    },
+    {
+        "question": "查询职位为 Department Manager 的所有员工的 id 和性别。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT T1.staff_id, T1.staff_gender FROM staff AS T1 JOIN staff_department_assignments AS T2 ON T1.staff_id = T2.staff_id WHERE T2.job_title_code = 'Department Manager'"
+    },
+    {
+        "question": "列出所有购买过 keyboard 产品的客户姓名（去重）。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT DISTINCT T1.customer_name FROM customers AS T1 JOIN customer_orders AS T2 ON T1.customer_id = T2.customer_id JOIN order_items AS T3 ON T2.order_id = T3.order_id JOIN products AS T4 ON T3.product_id = T4.product_id WHERE T4.product_name = 'keyboard'"
+    },
+    {
+        "question": "列出供应商 2 供应的、且价格高于所有产品平均价格的产品 id。",
+        "db_id": "department_store",
+        "gold_sql": "SELECT T1.product_id FROM product_suppliers AS T1 JOIN products AS T2 ON T1.product_id = T2.product_id WHERE T1.supplier_id = 2 AND T2.product_price > (SELECT avg(product_price) FROM products)"
     }
 ]

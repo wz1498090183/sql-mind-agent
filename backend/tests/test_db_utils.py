@@ -5,7 +5,7 @@
 
 import pytest
 
-from app.db_utils import execute_sql, get_schema, get_schema_dict
+from app.db_utils import execute_sql, get_schema, get_schema_dict, get_value_samples
 
 
 # 测试用数据库 ID（需在 SPIDER_DB_ROOT 下存在）
@@ -108,3 +108,25 @@ class TestGetSchemaDict:
             assert isinstance(table_name, str)
             assert isinstance(columns, list)
             assert len(columns) > 0
+
+
+class TestGetValueSamples:
+    """值检索 get_value_samples 功能测试。"""
+
+    def test_returns_non_empty(self) -> None:
+        """department_store 含类别列，值检索应返回非空样本。"""
+        samples = get_value_samples(TEST_DB_ID)
+        assert isinstance(samples, str)
+        assert len(samples) > 0
+
+    def test_contains_category_column(self) -> None:
+        """样本应覆盖 product_type_code 这类低基数类别列。"""
+        samples = get_value_samples(TEST_DB_ID)
+        assert "product_type_code" in samples
+
+    def test_respects_max_cols(self) -> None:
+        """max_cols=1 时最多返回一列的样本。"""
+        samples = get_value_samples(TEST_DB_ID, max_cols=1)
+        # 每列样本占一行 "- 表.列: ..."，max_cols=1 时仅 1 行
+        lines = [ln for ln in samples.splitlines() if ln.startswith("- ")]
+        assert len(lines) == 1

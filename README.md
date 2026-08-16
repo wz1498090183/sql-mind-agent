@@ -1,14 +1,22 @@
 # SQL Mind Agent — Text2SQL 多步骤智能问答 Agent
 
+[![CI](https://github.com/wz1498090183/sql-mind-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/wz1498090183/sql-mind-agent/actions)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Agent-orange.svg)](https://github.com/langchain-ai/langgraph)
+[![vLLM](https://img.shields.io/badge/vLLM-Inference-green.svg)](https://github.com/vllm-project/vllm)
+[![GRPO](https://img.shields.io/badge/RL-GRPO-purple.svg)](https://arxiv.org/abs/2402.03300)
+
 基于 LangGraph 构建的 Text2SQL 智能问答系统，支持将复杂自然语言问题拆解为多个 SQL 子任务，执行查询后聚合反思，最终生成可信的自然语言答案。
 
-本项目采用 Docker Compose 完成多服务容器编排，包含前端静态服务、Agent 推理后端、vLLM 大模型推理服务，支持一键拉起完整对话应用。
+## 核心亮点
 
-工程层面做环境职责隔离：
-
-- Agent 在线推理服务与 GRPO 强化学习训练代码目录分离，两套独立 Docker 运行环境，避免训练重型依赖增加推理镜像体积；
-- vLLM 推理服务基于官方镜像部署，仓库仅维护编排配置，不存储镜像、模型权重；模型文件通过宿主机目录挂载方式共享；
-- 默认启动远端模型对话推理链路，本地 vLLM 推理、GRPO 训练作为可选扩展能力，通过 Compose Profile 按需启动。
+- **多智能体任务编排**：Plan-Execute-Reflect 架构，将复杂问题拆解为带依赖关系的子任务 DAG，拓扑分层后层内并行、层间串行，并检测依赖环；
+- **SQL 自修复闭环**：每个子任务走「生成 → 四层校验 → 执行 → 失败重试」闭环，静态校验（语法 / 高危关键字 / 表名 / 列名拼写 / 上游 id 误用）与执行反馈双重兜底；
+- **值检索 + 检索式 few-shot**：抽取低基数类别列的样本值注入 Prompt 提升实体匹配，按问题相似度动态检索历史 SQL 示例替代静态 few-shot；
+- **三级兜底评估**：SQL 结果等价比较「字段一致看值 → 字段不一致看无序集合 → 大模型语义判断」，能识别不同列名/列序/行序下的等价结果并给出自然语言诊断；
+- **GRPO 强化学习微调**：以「SQL 可执行 + 格式合规」为奖励信号训练 LoRA，合并回基座模型供 vLLM 部署（对标 sqlcoder 小模型路线）；
+- **安全与可靠性**：只读 SQL 拦截（仅 SELECT/WITH），请求/子任务/LLM/SQLite 四层超时，全链路 trace 落库便于 badcase 排查。
 
 ## 架构
 
@@ -38,6 +46,30 @@ flowchart LR
                               每个子任务: generate→validate→execute→retry  ├── 未达上限 → retry(重规划)
                                                                          └── 达上限 → degrade(降级回答)
 ```
+
+## 量化效果
+
+### GRPO 训练奖励曲线
+
+在 department_store 数据上以「SQL 执行成功 + 格式合规」为奖励信号做 GRPO 微调，奖励随训练步数显著上升：
+
+| 步数 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|------|---|---|---|---|---|---|---|
+| 总 reward | 0.16 | 0.66 | 0.58 | 0.53 | 0.71 | 0.78 | 0.48 |
+| exec reward | -0.04 | 0.46 | 0.38 | 0.33 | 0.51 | 0.58 | 0.28 |
+
+### 评估指标体系
+
+`backend/evaluate.py` 对评估集逐条跑完整 Agent，输出结构化指标：
+
+| 指标 | 说明 |
+|------|------|
+| 一次成功率 | 首轮反思即通过的比例 |
+| 最终成功率 | 状态为 done 的占比 |
+| SQL 准确率 | 生成 SQL 执行结果与 gold_sql 语义一致的比例（三级兜底判定） |
+| 平均迭代轮数 | 平均反思重试次数 |
+
+评估集位于 `backend/data/eval_set.json`（22 条，取自 Spider benchmark 的 department_store 数据库，覆盖简单聚合 / 多表 JOIN / 子查询 / UNION 等难度），运行 `python evaluate.py` 生成完整报告（含逐条 SQL diff 对比）。
 
 ## 快速开始（Docker Compose 部署）
 
@@ -178,10 +210,12 @@ python main.py --demo
 
 ```
 sql-mind-agent/
+├── .github/workflows/ci.yml  # GitHub Actions CI（pytest + ruff + mypy）
 ├── docker-compose.yml        # Compose 编排（frontend+backend 默认；vllm/train 按 Profile）
 ├── .env.example              # 环境变量模板
-├── .gitignore
 ├── README.md
+├── docs/                     # 文档（架构与设计决策 / 效果截图）
+│   └── ARCHITECTURE.md
 ├── frontend/                 # 前端静态服务（Nginx，原生 ES Module）
 │   ├── Dockerfile
 │   ├── nginx.conf            # /api 反向代理到 backend，解决跨域
@@ -194,10 +228,10 @@ sql-mind-agent/
 │   ├── requirements.txt
 │   ├── api.py                # FastAPI 入口
 │   ├── main.py               # CLI 入口
-│   ├── evaluate.py           # 批量评估
+│   ├── evaluate.py           # 批量评估（三级兜底 + 多维度指标）
 │   ├── run_soul_case.py      # 灵魂 Case 演示
-│   ├── app/                  # 核心 Agent 包
-│   ├── data/                 # 运行时 SQLite 数据（traces.db）+ 评估集 eval_set.json
+│   ├── app/                  # 核心 Agent 包（graph / nodes / sql_subgraph / fewshot 等）
+│   ├── data/                 # 运行时 SQLite（traces.db）+ 评估集 eval_set.json + 示例池 fewshot_pool.json
 │   └── tests/                # pytest 单元测试
 ├── grpo-train/               # GRPO 训练（独立镜像，Profile 按需启动）
 │   ├── Dockerfile
@@ -224,6 +258,10 @@ mypy app/
 ```
 
 > 本地运行后端时，`.env` 可放在仓库根（与 Docker Compose 共用）或 `backend/.env`；`SPIDER_DB_ROOT` 相对路径按仓库根解析，即 `./spider_data/database`。
+
+## 相关文档
+
+- [架构与设计决策](docs/ARCHITECTURE.md)：双层图设计、反思机制、三级兜底、GRPO 选型等关键权衡。
 
 ## 应用效果示例
 ![运行界面1](docs/images/ScreenShot_2026-08-14_101922_828.png)

@@ -6,6 +6,7 @@ SQL 求解子图模块。
 每个子任务在此子图内完成 SQL 生成、校验、执行、重试闭环。
 """
 
+import difflib
 import os
 import re
 import sys
@@ -21,7 +22,8 @@ if str(_project_root) not in sys.path:
 import sqlparse
 from langgraph.graph import END, StateGraph
 
-from app.db_utils import execute_sql, get_schema, get_schema_dict
+from app.db_utils import execute_sql, get_schema, get_schema_dict, get_value_samples
+from app.fewshot import format_examples, retrieve_examples
 from app.llm_client import call_text
 from app.log_utils import get_logger
 from app.state import SubGraphState, SubTask
@@ -158,6 +160,8 @@ _SQL_GEN_PROMPT = """你是一个 SQLite SQL 专家。根据以下信息生成�
 ## 数据库 Schema
 {schema}
 
+{value_samples}
+
 {examples}
 
 ## 上游子查询结果
@@ -227,11 +231,30 @@ def _generate_sql_node(state: SubGraphState) -> dict:
     else:
         upstream_text = "无（本子任务为独立查询，无上游依赖）"
 
+    # 值检索：抽取低基数类别列样本值，帮助 WHERE 条件做实体匹配
+    db_id = state.get("db_id", "")
+    value_samples = ""
+    if db_id:
+        try:
+            value_samples = get_value_samples(db_id)
+        except Exception as e:
+            log.warning(f"值检索失败，跳过: {e}")
+
+    # 检索式 few-shot：优先用与当前问题最相似的示例，否则退回静态示例
+    examples = _SQL_FEW_SHOT
+    try:
+        dynamic = format_examples(retrieve_examples(subtask["description"], db_id, k=3))
+        if dynamic:
+            examples = dynamic
+    except Exception as e:
+        log.warning(f"动态 few-shot 检索失败，退回静态示例: {e}")
+
     # 基础 prompt
     prompt = _SQL_GEN_PROMPT.format(
         description=subtask["description"],
         schema=schema,
-        examples=_SQL_FEW_SHOT,
+        value_samples=value_samples or "（无列样本值）",
+        examples=examples,
         upstream_results=upstream_text,
     )
 
@@ -335,6 +358,24 @@ def _validate_sql_node(state: SubGraphState) -> dict:
                     log.info(f"表名校验通过  引用表={sorted(referenced)}（库中其他表: {sorted(not_found)}未在 SQL 中引用）")
         except Exception as e:
             log.warning(f"表名校验跳过: get_schema_dict({db_id}) 失败 — {e}")
+
+        # ---- 第 3.5 层: 列名拼写校验（限定引用，仅高置信度告警） ----
+        # 提取 alias.column / table.column 形式的列引用，若列名不在任何表
+        # 中、但与某已知列高度相似（拼写错误），给出纠正提示。只对高置信度
+        # 的拼写错误做硬拦截，其余交给 SQLite 执行层兜底，避免误伤合法别名。
+        all_columns = {c.lower() for cols in schema_dict.values() for c in cols}
+        qualified_refs = re.findall(
+            r"\b[A-Za-z_][A-Za-z0-9_]*\.([A-Za-z_][A-Za-z0-9_]*)\b", sql
+        )
+        for col_ref in qualified_refs:
+            col_lower = col_ref.lower()
+            if col_lower in all_columns or col_lower in {"count", "sum", "avg", "max", "min"}:
+                continue
+            suggestion = difflib.get_close_matches(col_lower, sorted(all_columns), n=1, cutoff=0.8)
+            if suggestion:
+                errors.append(
+                    f"SQL 引用了不存在的列名 '{col_ref}'，是否应为 '{suggestion[0]}'？"
+                )
 
         # ---- 第 4 层: 上游子任务 id 误用校验 ----
         # 依赖型 SQL 常见错误：把上游子任务 id（如 t1）直接当表名用，
