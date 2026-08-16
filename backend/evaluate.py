@@ -14,7 +14,7 @@ import argparse
 import json
 import sys
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from pathlib import Path
 from typing import Any
@@ -26,6 +26,7 @@ if str(_project_root) not in sys.path:
 
 from app.db_utils import execute_sql
 from app.graph import build_main_graph
+from app.llm_client import call_json
 from app.log_utils import get_logger, new_trace_id
 from app.state import SubTask, init_main_state
 
@@ -128,20 +129,125 @@ def _canonical_rows(columns: list[str], rows: frozenset[tuple]) -> frozenset[tup
     return frozenset(tuple(row[i] for i in order) for row in rows)
 
 
+# ============================================================
+# 三级兜底: 值比对 / 无序集合比对 / LLM 判断
+# ============================================================
+_JUDGE_PROMPT = """你是一个 SQL 结果比对专家。请判断两个 SQL 查询结果是否表达了相同的数据含义（语义等价）。
+
+## 原始问题
+{question}
+
+## 结果 A（Agent 生成）
+列: {agent_cols}
+数据: {agent_rows}
+
+## 结果 B（标准答案 Gold）
+列: {gold_cols}
+数据: {gold_rows}
+
+## 判断标准
+- 忽略列名拼写差异（如 COUNT(*) 与 cnt 等价）、列顺序、行顺序。
+- 比较两个结果表达的业务事实是否一致（数值是否相等、分组是否一致）。
+
+请严格只输出一个 JSON 对象。"""
+
+
+def _value_multiset(rows: frozenset[tuple]) -> Counter:
+    """把结果所有单元格值收集为无序多重集合，忽略列名、列序与行序。
+
+    Args:
+        rows: 规范化后的行集（每行为 tuple）。
+
+    Returns:
+        Counter: 单元格值 → 出现次数的多重集合。
+    """
+    counter: Counter = Counter()
+    for row in rows:
+        counter.update(row)
+    return counter
+
+
+def _llm_judge_results(
+    agent_result: dict,
+    gold_result: dict,
+    question: str | None,
+    trace_id: str,
+) -> tuple[bool, str]:
+    """第三层兜底：确定性比较不一致时，调用 LLM 判断两个结果是否语义等价。
+
+    Args:
+        agent_result: Agent 子任务 SQL 的执行结果。
+        gold_result: gold_sql 的执行结果。
+        question: 原始问题（辅助语义判断，可为空）。
+        trace_id: 日志追踪 ID。
+
+    Returns:
+        tuple[bool, str]: (是否等价, 判断说明)。
+    """
+    agent_cols = agent_result.get("columns", [])
+    agent_rows = agent_result.get("rows", [])
+    gold_cols = gold_result.get("columns", [])
+    gold_rows = gold_result.get("rows", [])
+
+    # 截断行数，避免 prompt 过长
+    _max_disp_rows = 20
+    agent_rows_disp = agent_rows[:_max_disp_rows]
+    gold_rows_disp = gold_rows[:_max_disp_rows]
+    if len(agent_rows) > _max_disp_rows:
+        agent_rows_disp.append(f"…（共 {len(agent_rows)} 行，仅展示前 {_max_disp_rows} 行）")
+    if len(gold_rows) > _max_disp_rows:
+        gold_rows_disp.append(f"…（共 {len(gold_rows)} 行，仅展示前 {_max_disp_rows} 行）")
+
+    prompt = _JUDGE_PROMPT.format(
+        question=question or "（未提供）",
+        agent_cols=agent_cols,
+        agent_rows=agent_rows_disp,
+        gold_cols=gold_cols,
+        gold_rows=gold_rows_disp,
+    )
+    schema_hint = '{"equivalent": true/false, "reason": "等价或不等价的简要说明"}'
+
+    try:
+        judge = call_json(
+            prompt=prompt,
+            schema_hint=schema_hint,
+            trace_id=trace_id,
+            max_retry=1,
+        )
+    except ValueError as e:
+        log = get_logger(trace_id)
+        log.error(f"LLM 兜底判断失败: {e}")
+        return False, f"确定性比较不一致，且 LLM 兜底判断失败（{type(e).__name__}）"
+
+    equivalent = bool(judge.get("equivalent", False))
+    reason = judge.get("reason", "")
+    return equivalent, f"LLM 兜底: {'等价' if equivalent else '不等价'} — {reason}"
+
+
 def compare_sql_results(
     agent_result: dict | None,
     gold_result: dict | None,
+    question: str | None = None,
+    trace_id: str | None = None,
 ) -> tuple[bool, str]:
-    """比较 Agent 执行结果与 gold_sql 执行结果是否一致。
+    """比较 Agent 执行结果与 gold_sql 执行结果是否一致，三级兜底。
 
-    比较规则:
-        1. 两边都失败 → 一致（都是拿不到数据），返回 True
-        2. 一边失败一边成功 → 不一致
-        3. 都成功 → 列数相等 + 行集（frozenset）相等；列名集合一致时按列名对齐列，否则位置对齐
+    三级比较策略：
+        1. 字段一致 → 看值：两边列名集合一致时，按列名对齐后精确比较值。
+        2. 字段不一致 → 看无序集合：列名不一致时，忽略列名/列序/行序，
+           比较单元格值的多重集合。
+        3. 仍不一致 → 大模型判断：前两层都不一致时，若提供 trace_id，
+           调用 LLM 判断两个结果是否语义等价；未提供则直接判不一致。
+
+    前置规则：
+        - 两边都失败 → 一致（都是拿不到数据），返回 True
+        - 一边失败一边成功 → 不一致
 
     Args:
         agent_result: Agent 子任务 SQL 的执行结果（db_utils.execute_sql 返回值）。
         gold_result: gold_sql 的执行结果。
+        question: 原始问题（供 LLM 兜底判断，可选）。
+        trace_id: 日志追踪 ID（提供时启用 LLM 兜底，可选）。
 
     Returns:
         tuple[bool, str]: (是否一致, 差异描述)。
@@ -166,29 +272,23 @@ def compare_sql_results(
     if agent_rows is None or gold_rows is None:
         return False, "结果规范化失败"
 
-    # 列数不一致 → 直接判不一致
-    if len(agent_cols) != len(gold_cols):
-        return False, (
-            f"列数不一致: Agent={len(agent_cols)}, Gold={len(gold_cols)}"
-        )
-
-    # 列对齐：两边列名集合一致时按列名重排（消除列序差异并锁定列身份，识别值互换）；
-    # 列名不同（如 COUNT(*) vs order_count）时保持位置对齐
+    # ---- 第 1 层：字段一致 → 看值（按列名对齐后精确比较） ----
     if {c.lower() for c in agent_cols} == {c.lower() for c in gold_cols}:
-        agent_rows = _canonical_rows(agent_cols, agent_rows)
-        gold_rows = _canonical_rows(gold_cols, gold_rows)
+        agent_rows_aligned = _canonical_rows(agent_cols, agent_rows)
+        gold_rows_aligned = _canonical_rows(gold_cols, gold_rows)
+        if agent_rows_aligned == gold_rows_aligned:
+            return True, "字段一致，值完全一致"
 
-    if agent_rows == gold_rows:
-        return True, "结果完全一致"
+    # ---- 第 2 层：字段不一致 → 看无序集合 ----
     else:
-        only_agent = agent_rows - gold_rows
-        only_gold = gold_rows - agent_rows
-        parts: list[str] = []
-        if only_agent:
-            parts.append(f"仅 Agent 有 {len(only_agent)} 行")
-        if only_gold:
-            parts.append(f"仅 Gold 有 {len(only_gold)} 行")
-        return False, " | ".join(parts)
+        if _value_multiset(agent_rows) == _value_multiset(gold_rows):
+            return True, "字段不一致，但值无序集合一致"
+
+    # ---- 第 3 层：还不一致 → 大模型判断 ----
+    if trace_id:
+        return _llm_judge_results(agent_result, gold_result, question, trace_id)
+
+    return False, "字段与值均不一致（未启用 LLM 兜底）"
 
 
 # ============================================================
@@ -399,7 +499,9 @@ def evaluate_one(
                     sub_result = detail_item.get("result")
                     if not sub_result:
                         continue
-                    is_match, desc = compare_sql_results(sub_result, gold_result)
+                    is_match, desc = compare_sql_results(
+                        sub_result, gold_result, question=question, trace_id=trace_id
+                    )
                     detail_item["sql_match_gold"] = is_match
                     detail_item["sql_match_detail"] = desc
                     if is_match:
