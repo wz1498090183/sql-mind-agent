@@ -1,7 +1,7 @@
 """
 LangGraph 主图编排（Day2+ 版本）。
 链路: START → plan → dispatch → aggregate → reflect
-       → [passed → finalize → END | 未达上限 → plan(iteration+1) | 达上限 → degrade → END]
+       → [passed → finalize → END | 未达上限 → retry(iteration+1) → plan | 达上限 → degrade → END]
 """
 
 import sys
@@ -60,6 +60,7 @@ def _on_retry(state: MainState) -> dict:
     但保留 reflection.fix_hint 供 plan_node 参考。
     """
     return {
+        "iteration": state.get("iteration", 0) + 1,
         "plan": [],
         "completed": {},
         "aggregated_answer": None,
@@ -81,13 +82,14 @@ def build_main_graph():
     """
     graph = StateGraph(MainState)
 
-    # 添加全部 6 个节点
+    # 添加全部 6 个节点 + retry 预处理节点
     graph.add_node("plan", plan_node)
     graph.add_node("dispatch", dispatch_node)
     graph.add_node("aggregate", aggregate_node)
     graph.add_node("reflect", reflect_node)
     graph.add_node("degrade", degrade_node)
     graph.add_node("finalize", finalize_node)
+    graph.add_node("retry", _on_retry)
 
     # 主链路: START → plan → dispatch → aggregate → reflect
     graph.add_edge(START, "plan")
@@ -101,10 +103,13 @@ def build_main_graph():
         route_after_reflect,
         {
             "finalize": "finalize",
-            "retry": "plan",
+            "retry": "retry",
             "degrade": "degrade",
         },
     )
+
+    # retry 预处理（iteration+1、清中间态）后回到 plan 重新规划
+    graph.add_edge("retry", "plan")
 
     # finalize / degrade 都通向 END
     graph.add_edge("finalize", END)

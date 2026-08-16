@@ -121,6 +121,35 @@ def _references_undefined_upstream(sql: str, upstream_results: dict | None) -> l
 # ============================================================
 # Prompt 模板
 # ============================================================
+_SQL_FEW_SHOT = """## 示例（演示推理方式与 SQL 结构，表名以当前 Schema 为准）
+
+### 示例 1：单表聚合
+需求：统计客户总数
+推理：对 customers 表直接做 COUNT 聚合，无需关联其他表。
+```sql
+SELECT COUNT(*) FROM customers;
+```
+
+### 示例 2：多表关联
+需求：查询每个订单对应的客户姓名
+推理：orders 表通过外键 customer_id 关联 customers 表，用 JOIN 关联后取所需列。
+```sql
+SELECT o.order_id, c.name
+FROM orders o JOIN customers c ON o.customer_id = c.customer_id;
+```
+
+### 示例 3：基于上游结果（依赖子任务）
+需求：基于上游 t1 的结果，进一步查询这些客户的订单总金额
+推理：上游 t1 是结果数据而非真实表，须用 WITH t1 AS (...) 定义成 CTE 后再引用，绝不能把 t1 当作表名。
+```sql
+WITH t1 AS (
+  SELECT customer_id FROM customer_orders GROUP BY customer_id
+)
+SELECT t1.customer_id, SUM(co.amount) AS total
+FROM t1 JOIN customer_orders co ON t1.customer_id = co.customer_id
+GROUP BY t1.customer_id;
+```"""
+
 _SQL_GEN_PROMPT = """你是一个 SQLite SQL 专家。根据以下信息生成一条正确的 SQL 查询语句。
 
 ## 用户需求
@@ -129,12 +158,15 @@ _SQL_GEN_PROMPT = """你是一个 SQLite SQL 专家。根据以下信息生成�
 ## 数据库 Schema
 {schema}
 
+{examples}
+
 ## 上游子查询结果
 {upstream_results}
 
 ## 要求
-- 只输出一条 SQL 语句，以分号结尾
-- 不要包含任何解释、注释或 Markdown 代码块
+- 先写一行「推理：」简要说明关键步骤（涉及哪些表、如何关联、聚合/筛选方式）
+- 再紧接一个 ```sql 代码块输出最终 SQL，以分号结尾
+- 推理控制在 1 行，不要输出其他任何内容
 - 确保表名和列名与 Schema 中定义的一致
 - 只允许 SELECT / WITH 查询，禁止任何写操作
 - 依赖上游子任务结果时，用 WITH ... AS (...) 定义同名 CTE 后引用，
@@ -146,7 +178,7 @@ _SQL_RETRY_PROMPT = """## 上次生成的 SQL（存在错误）
 ## 错误原因
 {error}
 
-请修正以上 SQL 语句，重新生成一条正确的查询。确保只输出 SQL，不要包含任何额外文字。"""
+请修正以上 SQL 语句，重新生成一条正确的查询。同样先写一行「推理：」说明修正思路，再紧接一个 ```sql 代码块输出修正后的 SQL。"""
 
 
 # ============================================================
@@ -199,6 +231,7 @@ def _generate_sql_node(state: SubGraphState) -> dict:
     prompt = _SQL_GEN_PROMPT.format(
         description=subtask["description"],
         schema=schema,
+        examples=_SQL_FEW_SHOT,
         upstream_results=upstream_text,
     )
 

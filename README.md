@@ -190,3 +190,9 @@ mypy app/
 ```
 
 > 本地运行后端时，`.env` 可放在仓库根（与 Docker Compose 共用）或 `backend/.env`；`SPIDER_DB_ROOT` 相对路径按仓库根解析，即 `./spider_data/database`。
+
+
+![运行界面1](docs/images/ScreenShot_2026-08-14_101922_828.png)
+![运行界面2](docs/images/ScreenShot_2026-08-14_102527_994.png)
+![前端界面3](docs/images/ScreenShot_2026-08-14_105832_237.png)
+![grpo过程日志](docs/images/grpo过程日志.png)

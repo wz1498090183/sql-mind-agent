@@ -47,9 +47,29 @@ _PLAN_PROMPT = """你是一个 Text2SQL 任务规划专家。根据用户提出�
    例如问题问"歌手"但 Schema 中有 Contacts（联系人）表，就查询 Contacts 表。
    即使不完全匹配，也必须返回至少 1 个子任务，不要返回空 subtasks。
 
+{examples}
+
 {reflection_block}
 
 请严格只输出一个 JSON 对象。"""
+
+_PLAN_FEW_SHOT = """## 示例（演示拆解方式与 JSON 结构，表名以当前 Schema 为准）
+
+### 示例 1：简单问题 → 单子任务
+问题：Customers 表有多少条记录？
+```json
+{"subtasks": [{"id": "t1", "description": "查询 Customers 表的记录总数", "depends_on": []}]}
+```
+
+### 示例 2：同比/环比 → 多个并行子任务
+问题：本季度销售额相比上季度增长了多少？
+```json
+{"subtasks": [
+  {"id": "t1", "description": "查询 sales 表本季度（日期在当前季度内）的销售总额", "depends_on": []},
+  {"id": "t2", "description": "查询 sales 表上季度（日期在上一季度内）的销售总额", "depends_on": []}
+]}
+```
+（增长率计算交给聚合层完成，不在此生成 SQL）"""
 
 _RETRY_BLOCK = """## 上一轮失败原因
 {reason}
@@ -183,6 +203,7 @@ def plan_node(state: MainState) -> dict[str, Any]:
     prompt = _PLAN_PROMPT.format(
         question=question,
         schema=schema if schema else "（无 Schema，请根据问题推断）",
+        examples=_PLAN_FEW_SHOT,
         reflection_block=reflection_block,
     )
 
