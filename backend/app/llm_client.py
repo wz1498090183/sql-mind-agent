@@ -20,6 +20,7 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from app.log_utils import get_logger
 
@@ -91,11 +92,11 @@ def get_llm(temperature: float = 0.0) -> ChatOpenAI:
     extra_body = {} if USE_LOCAL_MODEL else {"thinking": {"type": "disabled"}}
 
     return ChatOpenAI(
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         base_url=base_url,
         model=model,
         temperature=temperature,
-        request_timeout=llm_timeout,
+        timeout=llm_timeout,
         extra_body=extra_body,
     )
 
@@ -197,7 +198,7 @@ def call_json(
         else:
             current_prompt = (
                 full_prompt
-                + f"\n\n【错误】上次输出无法解析为 JSON，请严格只输出一个 JSON 对象，"
+                + "\n\n【错误】上次输出无法解析为 JSON，请严格只输出一个 JSON 对象，"
                 + f"不要包含任何额外文字。（重试 {attempt - 1}/{max_retry}）"
             )
 
@@ -220,7 +221,8 @@ def call_json(
                 f"最后一次异常: {type(llm_exc).__name__}: {llm_exc}"
             ) from llm_exc
 
-        last_output = response.content if hasattr(response, "content") else str(response)
+        raw_output = response.content if hasattr(response, "content") else str(response)
+        last_output = raw_output if isinstance(raw_output, str) else str(raw_output)
         elapsed_ms = (time.perf_counter() - t0) * 1000
 
         # 尝试解析 JSON
@@ -272,7 +274,8 @@ def call_text(prompt: str, trace_id: str) -> str:
         )
         raise
 
-    text = response.content if hasattr(response, "content") else str(response)
+    raw_output = response.content if hasattr(response, "content") else str(response)
+    text = raw_output if isinstance(raw_output, str) else str(raw_output)
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     log.info(

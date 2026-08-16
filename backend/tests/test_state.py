@@ -3,12 +3,9 @@
 覆盖: SubTask / MainState 字段完整性，init_main_state 工厂函数。
 """
 
-import pytest
 
 from app.state import (
     SubTask,
-    MainState,
-    SubGraphState,
     init_main_state,
 )
 

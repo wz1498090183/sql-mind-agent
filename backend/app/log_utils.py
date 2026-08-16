@@ -1,6 +1,9 @@
 """最小可用的日志模块，基于 loguru，仅用于调试。控制台彩色 + 文件按天切割保留7天。"""
-import sys, time, uuid
+import sys
+import time
+import uuid
 from functools import wraps
+
 from loguru import logger
 
 logger.remove()
@@ -38,6 +41,10 @@ def log_node(func):
 
 # ---------- 自测 ----------
 if __name__ == "__main__":
-    tid = new_trace_id(); lg = get_logger(tid)
-    lg.info("日志模块初始化完成"); lg.debug("调试信息"); lg.warning("警告"); lg.error("错误（模拟）")
+    tid = new_trace_id()
+    lg = get_logger(tid)
+    lg.info("日志模块初始化完成")
+    lg.debug("调试信息")
+    lg.warning("警告")
+    lg.error("错误（模拟）")
     print(f"trace_id={tid}  日志文件见 logs/app.log")

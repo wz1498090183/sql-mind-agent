@@ -2,11 +2,9 @@
 测试 app.graph — 反思路由逻辑。
 """
 
-import pytest
 
 from app.graph import build_main_graph, route_after_reflect
 from app.state import MainState, init_main_state
-
 
 # ------------------------------------------------------------
 # route_after_reflect 测试（纯函数，不需要 LLM）

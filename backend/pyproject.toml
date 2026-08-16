@@ -52,6 +52,7 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
+    "E402",  # 模块级 import 前有 sys.path 引导代码（支持任意目录直接运行脚本）
 ]
 
 [tool.ruff.lint.isort]

@@ -14,6 +14,7 @@ LangGraph 多步骤 Text2SQL Agent 的状态定义模块。
 import operator
 from typing import Annotated, TypedDict
 
+
 # ============================================================
 # 0. 基础数据结构
 # ============================================================

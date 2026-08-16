@@ -5,14 +5,14 @@
     → [finalize_node | degrade_node]
 """
 
-import json
 import os
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # 确保项目根目录在 sys.path 中，支持任意目录运行本文件
 _project_root = Path(__file__).resolve().parent.parent
@@ -22,9 +22,8 @@ if str(_project_root) not in sys.path:
 from app.db_utils import get_schema, get_value_samples
 from app.llm_client import call_json
 from app.log_utils import get_logger
-from app.state import MainState, Reflection, SqlResult, SubTask
 from app.sql_subgraph import solve_subtask
-
+from app.state import MainState, SqlResult, SubTask
 
 # ============================================================
 # Prompt 模板 — 任务规划
@@ -338,11 +337,12 @@ def dispatch_node(state: MainState) -> dict[str, Any]:
             """在线程池中执行单个子任务，传入上游依赖结果。"""
             tid = task["id"]
             # 收集上游依赖结果
-            upstream: dict[str, dict] = {}
+            upstream: dict[str, SqlResult] = {}
             for dep_id in task.get("depends_on", []):
                 dep_task = completed_map.get(dep_id)
-                if dep_task and dep_task.get("result"):
-                    upstream[dep_id] = dep_task["result"]
+                dep_result = dep_task.get("result") if dep_task else None
+                if dep_result is not None:
+                    upstream[dep_id] = dep_result
 
             log = get_logger(trace_id)
             log.info(f"  [{tid}] 开始调度  depends_on={task.get('depends_on', [])}  upstream_keys={list(upstream.keys())}")
@@ -468,8 +468,8 @@ def aggregate_node(state: MainState) -> dict[str, Any]:
     for sid, task in completed.items():
         details = f"### 子任务 {sid}: {task.get('description', '-')}\n"
         details += f"状态: {task.get('status', '-')}\n"
-        if task.get("status") == "success" and task.get("result"):
-            r = task["result"]
+        r = task.get("result")
+        if task.get("status") == "success" and r:
             details += f"列: {r.get('columns', [])}\n"
             details += f"数据行数: {len(r.get('rows', []))}\n"
             details += f"数据: {r.get('rows', [])}\n"
@@ -655,7 +655,7 @@ def reflect_node(state: MainState) -> dict[str, Any]:
     question: str = state.get("question", "")
     plan: list[SubTask] = state.get("plan", [])
     completed: dict[str, SubTask] = state.get("completed", {})
-    aggregated_answer: str = state.get("aggregated_answer", "")
+    aggregated_answer: str = state.get("aggregated_answer") or ""
     iteration: int = state.get("iteration", 0)
     max_iteration: int = state.get("max_iteration", 3)
     log = get_logger(trace_id)
@@ -708,8 +708,8 @@ def reflect_node(state: MainState) -> dict[str, Any]:
         task_lines.append(f"  状态: {task.get('status', '-')}")
         if task.get("sql"):
             task_lines.append(f"  SQL: {task['sql']}")
-        if task.get("status") == "success" and task.get("result"):
-            r = task["result"]
+        r = task.get("result")
+        if task.get("status") == "success" and r:
             task_lines.append(f"  列: {r.get('columns', [])}")
             rows = r.get("rows", [])
             if len(rows) <= 10:
@@ -812,12 +812,13 @@ def degrade_node(state: MainState) -> dict[str, Any]:
     completed: dict[str, SubTask] = state.get("completed", {})
     iteration: int = state.get("iteration", 0)
     max_iteration: int = state.get("max_iteration", 3)
-    reflection = state.get("reflection", {})
+    reflection = state.get("reflection")
+    reason = reflection.get("reason", "-") if reflection else "-"
     log = get_logger(trace_id)
 
     log.warning(
         f"degrade_node 进入  iteration={iteration}/{max_iteration}  "
-        f"末次反思: {reflection.get('reason', '-')[:100]}"
+        f"末次反思: {reason[:100]}"
     )
 
     # 收集部分可用结果
@@ -882,7 +883,7 @@ def finalize_node(state: MainState) -> dict[str, Any]:
         dict: 更新后的 state 字段（final_answer / status）。
     """
     trace_id: str = state.get("trace_id", "-")
-    aggregated_answer: str = state.get("aggregated_answer", "")
+    aggregated_answer: str = state.get("aggregated_answer") or ""
     log = get_logger(trace_id)
 
     log.info(f"finalize_node 进入  answer长度={len(aggregated_answer)}")
@@ -954,14 +955,14 @@ if __name__ == "__main__":
         log.info(f"plan 完成: subtasks={len(plan_result.get('plan', []))}")
 
         # 合并进 state
-        state_after_plan = {**initial_state, **plan_result}
+        state_after_plan: MainState = cast(MainState, {**initial_state, **plan_result})
 
         # Step 2: dispatch
         dispatch_result = dispatch_node(state_after_plan)
         log.info(f"dispatch 完成: completed={len(dispatch_result.get('completed', {}))}")
 
         # 合并进 state
-        state_after_dispatch = {**state_after_plan, **dispatch_result}
+        state_after_dispatch: MainState = cast(MainState, {**state_after_plan, **dispatch_result})
 
         # Step 3: aggregate
         agg_result = aggregate_node(state_after_dispatch)

@@ -12,7 +12,7 @@
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -157,7 +157,7 @@ def save_trace(state: dict[str, Any], db_path: str | None = None) -> None:
         error_info = reflection.get("reason", "")
 
     plan_json = _serialize_plan(plan)
-    created_at = datetime.now(timezone.utc).isoformat()
+    created_at = datetime.now(UTC).isoformat()
 
     conn = sqlite3.connect(str(target))
     try:

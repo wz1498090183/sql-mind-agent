@@ -2,7 +2,6 @@
 pytest 配置文件。
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -13,6 +12,7 @@ if str(_project_root) not in sys.path:
 
 # 加载 .env 文件（优先 backend/.env，其次仓库根 .env）
 from dotenv import load_dotenv
+
 _env_path = _project_root / ".env"
 if not _env_path.is_file():
     _env_path = _project_root.parent / ".env"

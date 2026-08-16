@@ -42,7 +42,7 @@ def route_after_reflect(state: MainState) -> Literal["finalize", "retry", "degra
     Returns:
         路由目标字符串。
     """
-    reflection: Reflection | None = state.get("reflection")  # type: ignore[assignment]
+    reflection: Reflection | None = state.get("reflection")
     iteration: int = state.get("iteration", 0)
     max_iteration: int = state.get("max_iteration", 3)
 

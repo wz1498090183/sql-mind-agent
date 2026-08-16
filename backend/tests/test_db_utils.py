@@ -7,7 +7,6 @@ import pytest
 
 from app.db_utils import execute_sql, get_schema, get_schema_dict, get_value_samples
 
-
 # 测试用数据库 ID（需在 SPIDER_DB_ROOT 下存在）
 TEST_DB_ID = "department_store"
 

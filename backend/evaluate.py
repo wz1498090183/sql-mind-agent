@@ -14,8 +14,9 @@ import argparse
 import json
 import sys
 import time
-from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from pathlib import Path
 from typing import Any
 
@@ -823,7 +824,7 @@ def main() -> None:
     if failed > 0:
         print(f"[WARN] {failed} 条用例未正常完成（超时/异常）")
     if metrics["sql_accuracy"] is not None and metrics["sql_accuracy"] < 1.0:
-        print(f"[WARN] SQL 准确率 < 100%，详见报告文件中的 subtask_details.sql_match_gold 字段")
+        print("[WARN] SQL 准确率 < 100%，详见报告文件中的 subtask_details.sql_match_gold 字段")
 
     sys.exit(0 if failed == 0 else 1)
 

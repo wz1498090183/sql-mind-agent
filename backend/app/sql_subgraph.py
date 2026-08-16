@@ -28,6 +28,7 @@ from app.llm_client import call_text
 from app.log_utils import get_logger
 from app.state import SubGraphState, SubTask
 
+
 # ============================================================
 # SQL 清洗工具
 # ============================================================
@@ -259,8 +260,7 @@ def _generate_sql_node(state: SubGraphState) -> dict:
     )
 
     # 若是重试，追加上次 SQL 和错误信息
-    is_retry = retry_count > 0 and previous_sql and previous_error
-    if is_retry:
+    if retry_count > 0 and previous_sql and previous_error:
         prompt += "\n\n" + _SQL_RETRY_PROMPT.format(
             sql=previous_sql, error=previous_error,
         )
@@ -315,7 +315,7 @@ def _validate_sql_node(state: SubGraphState) -> dict:
     upstream_results: dict = state.get("upstream_results", {})
     trace_id: str = subtask.get("id", "-")
     log = get_logger(trace_id)
-    sql = subtask.get("sql", "")
+    sql = subtask.get("sql") or ""
 
     log.info(f"validate_sql 进入  SQL=[{sql[:100]}{'...' if len(sql) > 100 else ''}]")
 
@@ -429,7 +429,7 @@ def _execute_sql_node(state: SubGraphState) -> dict:
     db_id: str = state.get("db_id", "")
     trace_id: str = subtask.get("id", "-")
     log = get_logger(trace_id)
-    sql = subtask.get("sql", "")
+    sql = subtask.get("sql") or ""
 
     log.info(f"execute_sql 进入  SQL=[{sql[:100]}{'...' if len(sql) > 100 else ''}]")
 
@@ -531,7 +531,7 @@ def _after_retry_decision(state: SubGraphState) -> Literal["done", "retry", "giv
 # ============================================================
 # 图编排: build_sql_subgraph
 # ============================================================
-def build_sql_subgraph() -> StateGraph:
+def build_sql_subgraph():
     """构建 SQL 求解子图，返回 CompiledGraph。
 
     子图流程:
@@ -639,7 +639,7 @@ def solve_subtask(
         f"solve_subtask 结束  总耗时 {elapsed_ms:.0f}ms  "
         f"status={result_subtask['status']}  "
         f"retry_count={result_subtask.get('retry_count', 0)}  "
-        f"sql=[{result_subtask.get('sql', '')[:80] or '-'}]"
+        f"sql=[{(result_subtask.get('sql') or '-')[:80]}]"
     )
 
     return result_subtask
@@ -677,7 +677,7 @@ if __name__ == "__main__":
             upstream_results=None,
             trace_id=tid,
         )
-        log.info(f"=== 最终结果 ===")
+        log.info("=== 最终结果 ===")
         log.info(f"  status      = {result['status']}")
         log.info(f"  sql         = {result.get('sql', '-')}")
         log.info(f"  result      = {result.get('result', '-')}")

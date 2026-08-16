@@ -21,19 +21,17 @@ _project_root = Path(__file__).resolve().parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from app.graph import build_main_graph, route_after_reflect
+from app.log_utils import logger, new_trace_id
 from app.nodes import (
+    _topological_levels,
     aggregate_node,
     degrade_node,
     dispatch_node,
     finalize_node,
     plan_node,
     reflect_node,
-    _topological_levels,
 )
-from app.log_utils import get_logger, logger, new_trace_id
 from app.state import SubTask, init_main_state
-
 
 # ============================================================
 # 演示输出美化工具
@@ -313,7 +311,6 @@ def run_single_case(
         max_iteration: 最大反思迭代轮次。
     """
     tid = new_trace_id()
-    log = get_logger(tid)
 
     # 抑制 loguru 控制台输出，保持演示界面整洁
     silenced_handlers = _suppress_loguru_console()
@@ -716,7 +713,7 @@ def main() -> None:
 
     # 逐个执行
     total_start = time.perf_counter()
-    for idx, case in enumerate(selected):
+    for case in selected:
         case_num = SOUL_CASES.index(case) + 1
         _print_case_banner(case_num, case["name"], case["difficulty"])
         run_single_case(

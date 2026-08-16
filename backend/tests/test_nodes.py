@@ -2,21 +2,15 @@
 测试 app.nodes — 主图节点核心逻辑。
 覆盖: 拓扑排序（正常/环检测），plan_node / aggregate_node 功能。
 """
-import os
-from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.nodes import (
-    _topological_levels,
-    _pre_calc_summary,
     _classify_dimension,
-    plan_node,
-    aggregate_node,
+    _pre_calc_summary,
+    _topological_levels,
 )
-from app.state import SubTask, init_main_state
-
+from app.state import SubTask
 
 TEST_DB_ID = "department_store"
 

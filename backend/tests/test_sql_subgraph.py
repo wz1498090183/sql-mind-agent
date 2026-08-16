@@ -3,7 +3,6 @@
 覆盖: SQL 清洗、高危关键字拦截、校验逻辑。
 """
 
-import pytest
 
 from app.sql_subgraph import (
     _clean_sql,

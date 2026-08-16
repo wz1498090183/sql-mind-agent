@@ -15,6 +15,8 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
+from app.state import SqlResult
+
 # 加载 .env 文件中的环境变量（使用 python-dotenv）
 # 优先 backend/.env，其次仓库根 .env（本地开发时 .env 在仓库根）
 _env_path = _project_root / ".env"
@@ -67,7 +69,7 @@ def get_connection(db_id: str) -> sqlite3.Connection:
     return conn
 
 
-def execute_sql(db_id: str, sql: str, timeout: float = 5.0) -> dict:
+def execute_sql(db_id: str, sql: str, timeout: float = 5.0) -> SqlResult:
     """执行只读 SQL 查询，返回结构化结果字典。
 
     仅允许 SELECT 和 WITH 开头的只读语句（含 WITH RECURSIVE），
@@ -320,17 +322,17 @@ if __name__ == "__main__":
                 print(f"  [FAIL] {result['error']}")
 
         # 4. 测试 execute_sql — 拒绝写操作
-        print(f"\n--- execute_sql: 拒绝 INSERT 语句 ---")
+        print("\n--- execute_sql: 拒绝 INSERT 语句 ---")
         result = execute_sql(db_id, "INSERT INTO t VALUES (1)")
         print(f"  success={result['success']}, error={result['error']}")
 
         # 5. 测试 execute_sql — 无效 SQL
-        print(f"\n--- execute_sql: 无效 SQL ---")
+        print("\n--- execute_sql: 无效 SQL ---")
         result = execute_sql(db_id, "SELECT * FROM nonexistent_table")
         print(f"  success={result['success']}, error={result['error']}")
 
         # 6. 测试 WITH 子句
-        print(f"\n--- execute_sql: WITH 子句 ---")
+        print("\n--- execute_sql: WITH 子句 ---")
         if first_table:
             result = execute_sql(
                 db_id,
@@ -338,7 +340,7 @@ if __name__ == "__main__":
             )
             print(f"  success={result['success']}, columns={result['columns']}")
 
-        print(f"\n=== 自测完成 ===")
+        print("\n=== 自测完成 ===")
 
     # 自测使用 department_store 库
     db_id = "department_store"

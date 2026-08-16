@@ -14,9 +14,10 @@ FastAPI 接口模块 — Text2SQL 多步骤智能问答 API。
 
 import asyncio
 import json
+from collections.abc import AsyncGenerator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from fastapi import FastAPI, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -225,7 +226,7 @@ async def query(req: QueryRequest) -> QueryResponse | JSONResponse:
             _run_graph(),
             timeout=_REQUEST_TIMEOUT,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         log.error(
             f"POST /query 请求超时  timeout={_REQUEST_TIMEOUT}s  "
             f"已等待 {_REQUEST_TIMEOUT}s 仍未完成，返回降级响应"
@@ -377,7 +378,6 @@ async def query_stream(
             # 用 astream 流式执行，每个节点完成后 yield 一次
             # accumulated_state 合并所有 update，循环结束后即为最终状态
             accumulated_state = dict(state)
-            last_node: str | None = None
 
             # 对每个 astream chunk 加超时检测，整体超时后走降级而非崩溃
             astream_iter = graph.astream(state, stream_mode="updates")
@@ -387,7 +387,7 @@ async def query_stream(
                         astream_iter.__anext__(),
                         timeout=_REQUEST_TIMEOUT,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     log.error(
                         f"GET /query/stream 请求超时  "
                         f"timeout={_REQUEST_TIMEOUT}s，返回降级响应"
@@ -431,8 +431,6 @@ async def query_stream(
                             ensure_ascii=False,
                         ),
                     }
-
-                    last_node = node_name
 
             # 从累积状态中提取最终字段
             final_answer: str | None = accumulated_state.get("final_answer")
